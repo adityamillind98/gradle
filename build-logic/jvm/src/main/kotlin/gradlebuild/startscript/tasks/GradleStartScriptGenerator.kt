@@ -34,6 +34,7 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.util.internal.TextUtil
+import java.io.File
 import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 
@@ -47,6 +48,13 @@ abstract class GradleStartScriptGenerator : DefaultTask() {
     @get:Input
     val launcherJarName: String
         get() = launcherJar.singleFile.name
+
+    @get:Internal
+    abstract val agentJars: ConfigurableFileCollection
+
+    @get:Input
+    val agentJarNames: List<String>
+        get() = agentJars.files.map { it.name }
 
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.NONE)
@@ -75,8 +83,14 @@ abstract class GradleStartScriptGenerator : DefaultTask() {
         generator.setClasspath(listOf("lib/$launcherJarName"))
         generator.setAppNameSystemProperty("org.gradle.appname")
         generator.setDefaultJvmOpts(listOf("-Xmx64m", "-Xms64m"))
-        generator.generateUnixScript(startScriptsDir.file("gradle").get().asFile)
-        generator.generateWindowsScript(startScriptsDir.file("gradle.bat").get().asFile)
+
+        val unixScriptFile = startScriptsDir.file("gradle").get().asFile
+        generator.generateUnixScript(unixScriptFile)
+        unixScriptFile.injectAgentOptions("\n")
+
+        val windowsScriptFile = startScriptsDir.file("gradle.bat").get().asFile
+        generator.generateWindowsScript(windowsScriptFile)
+        windowsScriptFile.injectAgentOptions("\r\n")
     }
 
     private
@@ -92,4 +106,22 @@ abstract class GradleStartScriptGenerator : DefaultTask() {
         StartScriptTemplateBindingFactory.windows(),
         FileCollectionBackedTextResource(temporaryFileProvider, windowsScriptTemplate, StandardCharsets.UTF_8)
     )
+
+    private
+    fun File.injectAgentOptions(separator: String) {
+        writeBytes(readLines().joinToString(separator = separator) { line ->
+            when {
+                line.startsWith("DEFAULT_JVM_OPTS=") ->
+                    line + separator + "DEFAULT_JVM_OPTS=\"\$DEFAULT_JVM_OPTS ${getAgentOptions("\$APP_HOME").joinToString(separator = " ", prefix = "'", postfix = "'")}\""
+
+                line.startsWith("set DEFAULT_JVM_OPTS") ->
+                    line + separator + "set DEFAULT_JVM_OPTS=%DEFAULT_JVM_OPTS% ${getAgentOptions("%APP_HOME%").joinToString(separator = " ", prefix = "\"", postfix = "\"")}"
+
+                else -> line
+            }
+        }.toByteArray(StandardCharsets.UTF_8))
+    }
+
+    private
+    fun getAgentOptions(appHomeVar: String) = agentJarNames.map { "-javaagent:$appHomeVar/lib/agents/$it" }
 }
