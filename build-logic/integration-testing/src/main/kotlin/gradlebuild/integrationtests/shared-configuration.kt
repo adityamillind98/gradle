@@ -34,8 +34,10 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.attributes.Category
 import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.attributes.Usage
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.Directory
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.SourceSet
@@ -79,6 +81,7 @@ fun Project.addDependenciesAndConfigurations(prefix: String) {
         resolver("${prefix}TestAllDistributionPath", "gradle-all-distribution-zip", allDistribution)
         resolver("${prefix}TestDocsDistributionPath", "gradle-docs-distribution-zip", docsDistribution)
         resolver("${prefix}TestSrcDistributionPath", "gradle-src-distribution-zip", srcDistribution)
+        resolver("${prefix}TestAgentsClasspath", LibraryElements.JAR)
     }
 
     // do not attempt to find projects when the plugin is applied just to generate accessors
@@ -90,6 +93,7 @@ fun Project.addDependenciesAndConfigurations(prefix: String) {
             // Add the agent JAR to the test runtime classpath so the InProcessGradleExecuter can find the module and spawn daemons.
             // This doesn't apply the agent to the test process.
             "${prefix}TestRuntimeOnly"(project(":instrumentation-agent"))
+            "${prefix}TestAgentsClasspath"(project(":instrumentation-agent"))
         }
     }
 }
@@ -139,6 +143,16 @@ fun Project.getBucketProvider() = gradle.sharedServices.registerIfAbsent("buildB
 
 
 internal
+abstract class AgentsClasspathProvider : CommandLineArgumentProvider {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val agentsClasspath: ConfigurableFileCollection
+
+    override fun asArguments() = agentsClasspath.files.map { "-javaagent:$it" }
+}
+
+
+internal
 class SamplesBaseDirPropertyProvider(@InputDirectory @PathSensitive(PathSensitivity.RELATIVE) val autoTestedSamplesDir: Directory) : CommandLineArgumentProvider {
     override fun asArguments() = listOf("-DdeclaredSampleInputs=${autoTestedSamplesDir.asFile.absolutePath}")
 }
@@ -158,6 +172,16 @@ fun Project.createTestTask(name: String, executer: String, sourceSet: SourceSet,
         if (integTest.usesJavadocCodeSnippets.get()) {
             val samplesDir = layout.projectDirectory.dir("src/main")
             jvmArgumentProviders.add(SamplesBaseDirPropertyProvider(samplesDir))
+        }
+        val integTestUseAgentSysProp = "org.gradle.integtest.agent.allowed"
+        if (project.hasProperty(integTestUseAgentSysProp)) {
+            systemProperties[integTestUseAgentSysProp] = "true"
+
+            if (executer == "embedded") {
+                jvmArgumentProviders.add(objects.newInstance<AgentsClasspathProvider>().apply {
+                    agentsClasspath.from(configurations["${testType.prefix}TestAgentsClasspath"])
+                })
+            }
         }
     }
 
