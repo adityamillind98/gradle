@@ -17,6 +17,7 @@
 package org.gradle.api.internal.tasks.compile;
 
 import org.gradle.api.tasks.compile.CompileOptions;
+import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.internal.Factory;
 import org.gradle.internal.jvm.Jvm;
 import org.gradle.jvm.toolchain.JavaInstallationMetadata;
@@ -48,7 +49,7 @@ public abstract class AbstractJavaCompileSpecFactory<T extends JavaCompileSpec> 
 
             String customExecutable = compileOptions.getForkOptions().getExecutable();
             if (customExecutable != null) {
-                return getCommandLineSpec(new File(customExecutable));
+                return getCommandLineSpec(JavaExecutableUtils.resolveExecutable(null, customExecutable));
             }
 
             return getForkingSpec(Jvm.current().getJavaHome());

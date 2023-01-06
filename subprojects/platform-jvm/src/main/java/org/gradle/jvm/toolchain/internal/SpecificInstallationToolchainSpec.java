@@ -19,6 +19,7 @@ package org.gradle.jvm.toolchain.internal;
 import com.google.common.base.MoreObjects;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.jvm.toolchain.JavaToolchainSpec;
 
 import java.io.File;
 import java.util.Objects;
@@ -73,18 +74,17 @@ public class SpecificInstallationToolchainSpec extends DefaultToolchainSpec {
         }
     }
 
-    public static SpecificInstallationToolchainSpec fromJavaExecutable(ObjectFactory objectFactory, String executable) {
-        final File executableFile = new File(executable);
-        if (executableFile.exists()) {
-            if (!executableFile.isDirectory()) {
-                // Relying on the layout of the toolchain distribution: <JAVA HOME>/bin/<executable>
-                final File parentJavaHome = executableFile.getParentFile().getParentFile();
-                return new SpecificInstallationToolchainSpec(objectFactory, parentJavaHome);
+    public static JavaToolchainSpec fromJavaExecutable(ObjectFactory objectFactory, File executable) {
+        if (executable.exists()) {
+            if (executable.isDirectory()) {
+                throw new InvalidUserDataException("The configured executable is a directory (" + executable.getAbsolutePath() + ")");
             } else {
-                throw new InvalidUserDataException("The configured executable is a directory (" + executableFile.getAbsolutePath() + ")");
+                // Relying on the layout of the toolchain distribution: <JAVA HOME>/bin/<executable>
+                final File parentJavaHome = executable.getParentFile().getParentFile();
+                return new SpecificInstallationToolchainSpec(objectFactory, parentJavaHome);
             }
         } else {
-            throw new InvalidUserDataException("The configured executable does not exist (" + executableFile.getAbsolutePath() + ")");
+            throw new InvalidUserDataException("The configured executable does not exist (" + executable.getAbsolutePath() + ")");
         }
     }
 

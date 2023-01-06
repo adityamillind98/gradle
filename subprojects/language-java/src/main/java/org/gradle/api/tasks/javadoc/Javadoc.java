@@ -40,6 +40,7 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceTask;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.api.tasks.javadoc.internal.JavadocExecutableUtils;
 import org.gradle.api.tasks.javadoc.internal.JavadocSpec;
 import org.gradle.api.tasks.javadoc.internal.JavadocToolAdapter;
@@ -176,12 +177,21 @@ public abstract class Javadoc extends SourceTask {
     }
 
     private void validateExecutableMatchesToolchain() {
-        File toolchainExecutable = getJavadocTool().get().getExecutablePath().getAsFile();
-        String customExecutable = getExecutable();
-        checkState(
-            customExecutable == null || new File(customExecutable).equals(toolchainExecutable),
-            "Toolchain from `executable` property does not match toolchain from `javadocTool` property"
-        );
+        try {
+            File toolchainExecutable = getJavadocTool().get().getExecutablePath().getAsFile().getCanonicalFile();
+            String customExecutable = getExecutable();
+            if (customExecutable == null) {
+                return;
+            }
+            File resolvedCustomExecutable = JavaExecutableUtils.resolveExecutable(getProjectLayout(), customExecutable).getCanonicalFile();
+            checkState(
+                    resolvedCustomExecutable.equals(toolchainExecutable),
+                    "Toolchain from `executable` property (" + resolvedCustomExecutable +
+                            ") does not match toolchain from `javadocTool` property (" + toolchainExecutable + ")"
+            );
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private boolean isModule() {

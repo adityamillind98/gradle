@@ -60,6 +60,7 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.api.tasks.options.Option;
 import org.gradle.api.tasks.testing.junit.JUnitOptions;
 import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions;
@@ -639,12 +640,21 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
     }
 
     private void validateExecutableMatchesToolchain() {
-        File toolchainExecutable = getJavaLauncher().get().getExecutablePath().getAsFile();
-        String customExecutable = getExecutable();
-        checkState(
-            customExecutable == null || new File(customExecutable).equals(toolchainExecutable),
-            "Toolchain from `executable` property does not match toolchain from `javaLauncher` property"
-        );
+        try {
+            File toolchainExecutable = getJavaLauncher().get().getExecutablePath().getAsFile().getCanonicalFile();
+            String customExecutable = getExecutable();
+            if (customExecutable == null) {
+                return;
+            }
+            File resolvedCustomExecutable = JavaExecutableUtils.resolveExecutable(getProject().getLayout(), customExecutable).getCanonicalFile();
+            checkState(
+                resolvedCustomExecutable.equals(toolchainExecutable),
+                "Toolchain from `executable` property (" + resolvedCustomExecutable +
+                        ") does not match toolchain from `javaLauncher` property (" + toolchainExecutable + ")"
+            );
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private Set<String> getPreviousFailedTestClasses() {

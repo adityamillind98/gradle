@@ -17,6 +17,7 @@
 package org.gradle.api.tasks.javadoc.internal;
 
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.jvm.toolchain.JavaToolchainSpec;
 import org.gradle.jvm.toolchain.internal.SpecificInstallationToolchainSpec;
@@ -29,7 +30,8 @@ public class JavadocExecutableUtils {
     public static JavaToolchainSpec getExecutableOverrideToolchainSpec(Javadoc task, ObjectFactory objectFactory) {
         String customExecutable = task.getExecutable();
         if (customExecutable != null) {
-            return SpecificInstallationToolchainSpec.fromJavaExecutable(objectFactory, customExecutable);
+            return SpecificInstallationToolchainSpec.fromJavaExecutable(objectFactory,
+                    JavaExecutableUtils.resolveExecutable(task.getProject().getLayout(), customExecutable));
         }
 
         return null;
