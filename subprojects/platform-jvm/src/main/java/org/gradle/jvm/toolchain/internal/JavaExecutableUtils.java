@@ -17,6 +17,7 @@
 package org.gradle.jvm.toolchain.internal;
 
 import org.gradle.api.InvalidUserDataException;
+import org.gradle.internal.deprecation.DeprecationLogger;
 
 import java.io.File;
 
@@ -25,7 +26,11 @@ public class JavaExecutableUtils {
     public static File validateExecutable(String executable) {
         File executableFile = new File(executable);
         if (!executableFile.isAbsolute()) {
-            throw new InvalidUserDataException("Configuring an executable via a relative path (" + executable + ") is not allowed, resolving it might yield unexpected results");
+            DeprecationLogger.deprecateBehaviour("Configuring an executable via a relative path (" + executable + ")")
+                    .withContext("Resolving relative file paths might yield unexpected results (" + new File(executable).getAbsoluteFile() + ")")
+                    .willBecomeAnErrorInGradle9()
+                    .undocumented()
+                    .nagUser();
         }
         if (!executableFile.exists()) {
             throw new InvalidUserDataException("The configured executable does not exist (" + executableFile.getAbsolutePath() + ")");

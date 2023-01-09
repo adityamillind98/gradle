@@ -53,6 +53,8 @@ class JavadocTest extends AbstractProjectBuilderSpec {
         }
     }
 
+    //todo: test for relative path
+
     def "execution uses the tool"() {
         task.getJavadocTool().set(tool)
 
@@ -76,7 +78,7 @@ class JavadocTest extends AbstractProjectBuilderSpec {
     }
 
     def "fails if custom executable does not exist"() {
-        def invalidExecutable = "invalidExecutable"
+        def invalidExecutable = temporaryFolder.file("invalidExecutable")
 
         when:
         task.executable = invalidExecutable
@@ -86,6 +88,6 @@ class JavadocTest extends AbstractProjectBuilderSpec {
         def e = thrown(TaskExecutionException)
         def cause = TestUtil.getRootCause(e) as InvalidUserDataException
         cause.message.contains("The configured executable does not exist")
-        cause.message.contains(invalidExecutable)
+        cause.message.contains(invalidExecutable.absolutePath)
     }
 }
