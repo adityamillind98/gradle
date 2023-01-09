@@ -55,7 +55,6 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.WorkResult;
-import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.internal.file.Deleter;
 import org.gradle.internal.jvm.DefaultModularitySpec;
 import org.gradle.internal.jvm.JavaModuleDetector;
@@ -64,6 +63,7 @@ import org.gradle.jvm.toolchain.JavaCompiler;
 import org.gradle.jvm.toolchain.JavaInstallationMetadata;
 import org.gradle.jvm.toolchain.JavaToolchainService;
 import org.gradle.jvm.toolchain.internal.DefaultToolchainJavaCompiler;
+import org.gradle.jvm.toolchain.internal.JavaExecutableUtils;
 import org.gradle.language.base.internal.compile.CompileSpec;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.work.Incremental;
@@ -91,6 +91,7 @@ import static com.google.common.base.Preconditions.checkState;
  *     }
  * </pre>
  */
+@SuppressWarnings("MethodMayBeStatic")
 @CacheableTask
 public abstract class JavaCompile extends AbstractCompile implements HasCompileOptions {
     private final CompileOptions compileOptions;
@@ -218,10 +219,9 @@ public abstract class JavaCompile extends AbstractCompile implements HasCompileO
         return previousCompilationDataFile;
     }
 
-    private WorkResult performCompilation(JavaCompileSpec spec, Compiler<JavaCompileSpec> compiler) {
+    private void performCompilation(JavaCompileSpec spec, Compiler<JavaCompileSpec> compiler) {
         WorkResult result = new CompileJavaBuildOperationReportingCompiler(this, compiler, getServices().get(BuildOperationExecutor.class)).execute(spec);
         setDidWork(result.getDidWork());
-        return result;
     }
 
     @VisibleForTesting
@@ -254,35 +254,26 @@ public abstract class JavaCompile extends AbstractCompile implements HasCompileO
     }
 
     private void validateForkOptionsMatchToolchain() {
-        try {
-            if (!getOptions().isFork()) {
-                return;
-            }
-
-            JavaCompiler javaCompilerTool = getJavaCompiler().get();
-            File toolchainJavaHome = javaCompilerTool.getMetadata().getInstallationPath().getAsFile();
-            File toolchainExecutable = javaCompilerTool.getExecutablePath().getAsFile().getCanonicalFile();
-
-            ForkOptions forkOptions = getOptions().getForkOptions();
-            File customJavaHome = forkOptions.getJavaHome();
-            checkState(
-                customJavaHome == null || customJavaHome.equals(toolchainJavaHome),
-                "Toolchain from `javaHome` property on `ForkOptions` does not match toolchain from `javaCompiler` property"
-            );
-
-            String customExecutable = forkOptions.getExecutable();
-            if (customExecutable == null) {
-                return;
-            }
-            File resolvedCustomExecutable = JavaExecutableUtils.resolveExecutable(getProjectLayout(), customExecutable).getCanonicalFile();
-            checkState(
-                resolvedCustomExecutable.equals(toolchainExecutable),
-                "Toolchain from `executable` property on `ForkOptions` (" + resolvedCustomExecutable +
-                        ") does not match toolchain from `javaCompiler` property (" + toolchainExecutable + ")"
-            );
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        if (!getOptions().isFork()) {
+            return;
         }
+
+        JavaCompiler javaCompilerTool = getJavaCompiler().get();
+        File toolchainJavaHome = javaCompilerTool.getMetadata().getInstallationPath().getAsFile();
+        File toolchainExecutable = javaCompilerTool.getExecutablePath().getAsFile();
+
+        ForkOptions forkOptions = getOptions().getForkOptions();
+        File customJavaHome = forkOptions.getJavaHome();
+        checkState(
+            customJavaHome == null || customJavaHome.equals(toolchainJavaHome),
+            "Toolchain from `javaHome` property on `ForkOptions` does not match toolchain from `javaCompiler` property"
+        );
+
+        String customExecutablePath = forkOptions.getExecutable();
+        checkState(
+            customExecutablePath == null || JavaExecutableUtils.validateExecutable(customExecutablePath).equals(toolchainExecutable),
+            "Toolchain from `executable` property on `ForkOptions` does not match toolchain from `javaCompiler` property"
+        );
     }
 
     private boolean isToolchainCompatibleWithJava8() {

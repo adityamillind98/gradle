@@ -40,7 +40,6 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceTask;
 import org.gradle.api.tasks.TaskAction;
-import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.api.tasks.javadoc.internal.JavadocExecutableUtils;
 import org.gradle.api.tasks.javadoc.internal.JavadocSpec;
 import org.gradle.api.tasks.javadoc.internal.JavadocToolAdapter;
@@ -51,6 +50,7 @@ import org.gradle.internal.jvm.DefaultModularitySpec;
 import org.gradle.internal.jvm.JavaModuleDetector;
 import org.gradle.jvm.toolchain.JavaToolchainService;
 import org.gradle.jvm.toolchain.JavadocTool;
+import org.gradle.jvm.toolchain.internal.JavaExecutableUtils;
 import org.gradle.util.internal.ConfigureUtil;
 
 import javax.annotation.Nullable;
@@ -103,6 +103,7 @@ import static org.gradle.util.internal.GUtil.isTrue;
  * }
  * </pre>
  */
+@SuppressWarnings("MethodMayBeStatic")
 @CacheableTask
 public abstract class Javadoc extends SourceTask {
 
@@ -177,21 +178,12 @@ public abstract class Javadoc extends SourceTask {
     }
 
     private void validateExecutableMatchesToolchain() {
-        try {
-            File toolchainExecutable = getJavadocTool().get().getExecutablePath().getAsFile().getCanonicalFile();
-            String customExecutable = getExecutable();
-            if (customExecutable == null) {
-                return;
-            }
-            File resolvedCustomExecutable = JavaExecutableUtils.resolveExecutable(getProjectLayout(), customExecutable).getCanonicalFile();
-            checkState(
-                    resolvedCustomExecutable.equals(toolchainExecutable),
-                    "Toolchain from `executable` property (" + resolvedCustomExecutable +
-                            ") does not match toolchain from `javadocTool` property (" + toolchainExecutable + ")"
-            );
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        File toolchainExecutable = getJavadocTool().get().getExecutablePath().getAsFile();
+        String customExecutable = getExecutable();
+        checkState(
+            customExecutable == null || JavaExecutableUtils.validateExecutable(customExecutable).equals(toolchainExecutable),
+            "Toolchain from `executable` property does not match toolchain from `javadocTool` property"
+        );
     }
 
     private boolean isModule() {

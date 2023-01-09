@@ -20,7 +20,6 @@ dependencies {
     implementation(project(":reporting"))
     implementation(project(":platform-base"))
     implementation(project(":platform-jvm"))
-    implementation(project(":language-java"))
     implementation(project(":testing-base"))
     implementation(project(":testing-jvm-infrastructure"))
 

@@ -38,7 +38,6 @@ import org.gradle.api.internal.tasks.testing.TestFramework;
 import org.gradle.api.internal.tasks.testing.detection.DefaultTestExecuter;
 import org.gradle.api.internal.tasks.testing.filter.DefaultTestFilter;
 import org.gradle.api.internal.tasks.testing.junit.JUnitTestFramework;
-import org.gradle.api.internal.tasks.testing.junit.result.TestClassResult;
 import org.gradle.api.internal.tasks.testing.junit.result.TestResultSerializer;
 import org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestFramework;
 import org.gradle.api.internal.tasks.testing.testng.TestNGTestFramework;
@@ -60,7 +59,6 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
 import org.gradle.api.tasks.TaskAction;
-import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.api.tasks.options.Option;
 import org.gradle.api.tasks.testing.junit.JUnitOptions;
 import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions;
@@ -81,6 +79,7 @@ import org.gradle.internal.work.WorkerLeaseService;
 import org.gradle.jvm.toolchain.JavaLauncher;
 import org.gradle.jvm.toolchain.JavaToolchainService;
 import org.gradle.jvm.toolchain.JavaToolchainSpec;
+import org.gradle.jvm.toolchain.internal.JavaExecutableUtils;
 import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.process.JavaDebugOptions;
 import org.gradle.process.JavaForkOptions;
@@ -184,12 +183,7 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
         classpath = objectFactory.fileCollection();
         // Create a stable instance to represent the classpath, that takes care of conventions and mutations applied to the property
         stableClasspath = objectFactory.fileCollection();
-        stableClasspath.from(new Callable<Object>() {
-            @Override
-            public Object call() {
-                return getClasspath();
-            }
-        });
+        stableClasspath.from((Callable<Object>) () -> getClasspath());
         forkOptions = getForkOptionsFactory().newDecoratedJavaForkOptions();
         forkOptions.setEnableAssertions(true);
         forkOptions.setExecutable(null);
@@ -203,24 +197,11 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
     private Provider<JavaLauncher> createJavaLauncherConvention() {
         final ObjectFactory objectFactory = getObjectFactory();
         final JavaToolchainService javaToolchainService = getJavaToolchainService();
-        Provider<JavaToolchainSpec> executableOverrideToolchainSpec = getProviderFactory().provider(new Callable<JavaToolchainSpec>() {
-            @Override
-            public JavaToolchainSpec call() {
-                return TestExecutableUtils.getExecutableToolchainSpec(Test.this, objectFactory);
-            }
-        });
+        Provider<JavaToolchainSpec> executableOverrideToolchainSpec = getProviderFactory().provider(() -> TestExecutableUtils.getExecutableToolchainSpec(Test.this, objectFactory));
 
         return executableOverrideToolchainSpec
-            .flatMap(new Transformer<Provider<JavaLauncher>, JavaToolchainSpec>() {
-                @Override
-                public Provider<JavaLauncher> transform(JavaToolchainSpec spec) {
-                    return javaToolchainService.launcherFor(spec);
-                }
-            })
-            .orElse(javaToolchainService.launcherFor(new Action<JavaToolchainSpec>() {
-                @Override
-                public void execute(JavaToolchainSpec javaToolchainSpec) {}
-            }));
+            .flatMap((Transformer<Provider<JavaLauncher>, JavaToolchainSpec>) spec -> javaToolchainService.launcherFor(spec))
+            .orElse(javaToolchainService.launcherFor(javaToolchainSpec -> {}));
     }
 
     /**
@@ -640,33 +621,21 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
     }
 
     private void validateExecutableMatchesToolchain() {
-        try {
-            File toolchainExecutable = getJavaLauncher().get().getExecutablePath().getAsFile().getCanonicalFile();
-            String customExecutable = getExecutable();
-            if (customExecutable == null) {
-                return;
-            }
-            File resolvedCustomExecutable = JavaExecutableUtils.resolveExecutable(getProject().getLayout(), customExecutable).getCanonicalFile();
-            checkState(
-                resolvedCustomExecutable.equals(toolchainExecutable),
-                "Toolchain from `executable` property (" + resolvedCustomExecutable +
-                        ") does not match toolchain from `javaLauncher` property (" + toolchainExecutable + ")"
-            );
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        File toolchainExecutable = getJavaLauncher().get().getExecutablePath().getAsFile();
+        String customExecutable = getExecutable();
+        checkState(
+            customExecutable == null || JavaExecutableUtils.validateExecutable(customExecutable).equals(toolchainExecutable),
+            "Toolchain from `executable` property does not match toolchain from `javaLauncher` property"
+        );
     }
 
     private Set<String> getPreviousFailedTestClasses() {
         TestResultSerializer serializer = new TestResultSerializer(getBinaryResultsDirectory().getAsFile().get());
         if (serializer.isHasResults()) {
-            final Set<String> previousFailedTestClasses = new HashSet<String>();
-            serializer.read(new Action<TestClassResult>() {
-                @Override
-                public void execute(TestClassResult testClassResult) {
-                    if (testClassResult.getFailuresCount() > 0) {
-                        previousFailedTestClasses.add(testClassResult.getClassName());
-                    }
+            final Set<String> previousFailedTestClasses = new HashSet<>();
+            serializer.read(testClassResult -> {
+                if (testClassResult.getFailuresCount() > 0) {
+                    previousFailedTestClasses.add(testClassResult.getClassName());
                 }
             });
             return previousFailedTestClasses;

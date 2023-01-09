@@ -19,7 +19,6 @@ package org.gradle.api.internal.tasks.compile;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.tasks.compile.ForkOptions;
 import org.gradle.api.tasks.compile.JavaCompile;
-import org.gradle.api.tasks.internal.JavaExecutableUtils;
 import org.gradle.jvm.toolchain.JavaToolchainSpec;
 import org.gradle.jvm.toolchain.internal.SpecificInstallationToolchainSpec;
 
@@ -42,8 +41,7 @@ public class JavaCompileExecutableUtils {
 
         String customExecutable = forkOptions.getExecutable();
         if (customExecutable != null) {
-            return SpecificInstallationToolchainSpec.fromJavaExecutable(objectFactory,
-                    JavaExecutableUtils.resolveExecutable(task.getProject().getLayout(), customExecutable));
+            return SpecificInstallationToolchainSpec.fromJavaExecutable(objectFactory, customExecutable);
         }
 
         return null;
