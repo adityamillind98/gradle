@@ -26,6 +26,12 @@ import static org.junit.Assert.fail;
 
 public class BuildResultTest {
     @Test
+    public void rethrowDoesNothingWhenNoBuildFailure2() {
+        BuildResult result = new BuildResult(null, null);
+        result.rethrowFailure();
+    }
+
+    @Test
     public void rethrowDoesNothingWhenNoBuildFailure() {
         BuildResult result = new BuildResult(null, null);
         result.rethrowFailure();

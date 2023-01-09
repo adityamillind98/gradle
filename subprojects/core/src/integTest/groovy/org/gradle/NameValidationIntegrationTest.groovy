@@ -22,6 +22,18 @@ import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 
 class NameValidationIntegrationTest extends AbstractIntegrationSpec {
+    def "project names must not contain forbidden characters2"() {
+        given:
+        settingsFile << "rootProject.name = 'this::is::a::namespace'"
+        buildFile << ""
+
+        when:
+        fails 'help'
+
+        then:
+        assertFailureContainsForbiddenCharacterMessage('project name', 'this::is::a::namespace',
+            " Set the 'rootProject.name' or adjust the 'include' statement (see https://docs.gradle.org/${GradleVersion.current().version}/dsl/org.gradle.api.initialization.Settings.html#org.gradle.api.initialization.Settings:include(java.lang.String[]) for more details).")
+    }
 
     def "project names must not contain forbidden characters"() {
         given:
@@ -56,7 +68,7 @@ class NameValidationIntegrationTest extends AbstractIntegrationSpec {
         fails 'this/is/a/hierarchy'
 
         then:
-        assertFailureContainsForbiddenCharacterMessage('task name',"this/is/a/hierarchy")
+        assertFailureContainsForbiddenCharacterMessage('task name', "this/is/a/hierarchy")
     }
 
     def "configuration names must not contain forbidden characters"() {
@@ -96,7 +108,8 @@ class NameValidationIntegrationTest extends AbstractIntegrationSpec {
             " Set the 'rootProject.name' or adjust the 'include' statement (see https://docs.gradle.org/${GradleVersion.current().version}/dsl/org.gradle.api.initialization.Settings.html#org.gradle.api.initialization.Settings:include(java.lang.String[]) for more details).")
     }
 
-    @Requires(TestPrecondition.UNIX_DERIVATIVE) // all forbidden characters are illegal on Windows
+    @Requires(TestPrecondition.UNIX_DERIVATIVE)
+    // all forbidden characters are illegal on Windows
     def "does not fail when project name overrides an invalid folder name"() {
         given:
         def buildFolder = file(".folder: name")
@@ -111,7 +124,8 @@ class NameValidationIntegrationTest extends AbstractIntegrationSpec {
         output.contains("customName")
     }
 
-    @Requires(TestPrecondition.UNIX_DERIVATIVE) // all forbidden characters are illegal on Windows
+    @Requires(TestPrecondition.UNIX_DERIVATIVE)
+    // all forbidden characters are illegal on Windows
     def "does not assign an invalid project name from folder names"() {
         given:
         def buildFolder = file(".folder: name.")
