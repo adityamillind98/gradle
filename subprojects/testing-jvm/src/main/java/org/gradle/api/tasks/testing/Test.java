@@ -38,6 +38,7 @@ import org.gradle.api.internal.tasks.testing.TestFramework;
 import org.gradle.api.internal.tasks.testing.detection.DefaultTestExecuter;
 import org.gradle.api.internal.tasks.testing.filter.DefaultTestFilter;
 import org.gradle.api.internal.tasks.testing.junit.JUnitTestFramework;
+import org.gradle.api.internal.tasks.testing.junit.result.TestClassResult;
 import org.gradle.api.internal.tasks.testing.junit.result.TestResultSerializer;
 import org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestFramework;
 import org.gradle.api.internal.tasks.testing.testng.TestNGTestFramework;
@@ -183,7 +184,12 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
         classpath = objectFactory.fileCollection();
         // Create a stable instance to represent the classpath, that takes care of conventions and mutations applied to the property
         stableClasspath = objectFactory.fileCollection();
-        stableClasspath.from((Callable<Object>) () -> getClasspath());
+        stableClasspath.from(new Callable<Object>() {
+            @Override
+            public Object call() {
+                return getClasspath();
+            }
+        });
         forkOptions = getForkOptionsFactory().newDecoratedJavaForkOptions();
         forkOptions.setEnableAssertions(true);
         forkOptions.setExecutable(null);
@@ -197,11 +203,24 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
     private Provider<JavaLauncher> createJavaLauncherConvention() {
         final ObjectFactory objectFactory = getObjectFactory();
         final JavaToolchainService javaToolchainService = getJavaToolchainService();
-        Provider<JavaToolchainSpec> executableOverrideToolchainSpec = getProviderFactory().provider(() -> TestExecutableUtils.getExecutableToolchainSpec(Test.this, objectFactory));
+        Provider<JavaToolchainSpec> executableOverrideToolchainSpec = getProviderFactory().provider(new Callable<JavaToolchainSpec>() {
+            @Override
+            public JavaToolchainSpec call() {
+                return TestExecutableUtils.getExecutableToolchainSpec(Test.this, objectFactory);
+            }
+        });
 
         return executableOverrideToolchainSpec
-            .flatMap((Transformer<Provider<JavaLauncher>, JavaToolchainSpec>) spec -> javaToolchainService.launcherFor(spec))
-            .orElse(javaToolchainService.launcherFor(javaToolchainSpec -> {}));
+            .flatMap(new Transformer<Provider<JavaLauncher>, JavaToolchainSpec>() {
+                @Override
+                public Provider<JavaLauncher> transform(JavaToolchainSpec spec) {
+                    return javaToolchainService.launcherFor(spec);
+                }
+            })
+            .orElse(javaToolchainService.launcherFor(new Action<JavaToolchainSpec>() {
+                @Override
+                public void execute(JavaToolchainSpec javaToolchainSpec) {}
+            }));
     }
 
     /**
@@ -632,10 +651,13 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
     private Set<String> getPreviousFailedTestClasses() {
         TestResultSerializer serializer = new TestResultSerializer(getBinaryResultsDirectory().getAsFile().get());
         if (serializer.isHasResults()) {
-            final Set<String> previousFailedTestClasses = new HashSet<>();
-            serializer.read(testClassResult -> {
-                if (testClassResult.getFailuresCount() > 0) {
-                    previousFailedTestClasses.add(testClassResult.getClassName());
+            final Set<String> previousFailedTestClasses = new HashSet<String>();
+            serializer.read(new Action<TestClassResult>() {
+                @Override
+                public void execute(TestClassResult testClassResult) {
+                    if (testClassResult.getFailuresCount() > 0) {
+                        previousFailedTestClasses.add(testClassResult.getClassName());
+                    }
                 }
             });
             return previousFailedTestClasses;
