@@ -99,7 +99,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
-import static com.google.common.base.Preconditions.checkState;
 import static org.gradle.util.internal.ConfigureUtil.configureUsing;
 
 /**
@@ -642,10 +641,9 @@ public abstract class Test extends AbstractTestTask implements JavaForkOptions, 
     private void validateExecutableMatchesToolchain() {
         File toolchainExecutable = getJavaLauncher().get().getExecutablePath().getAsFile();
         String customExecutable = getExecutable();
-        checkState(
-            customExecutable == null || JavaExecutableUtils.validateExecutable(customExecutable).equals(toolchainExecutable),
-            "Toolchain from `executable` property does not match toolchain from `javaLauncher` property"
-        );
+        JavaExecutableUtils.validateExecutable(
+                customExecutable, "Toolchain from `executable` property",
+                toolchainExecutable, "toolchain from `javaLauncher` property");
     }
 
     private Set<String> getPreviousFailedTestClasses() {

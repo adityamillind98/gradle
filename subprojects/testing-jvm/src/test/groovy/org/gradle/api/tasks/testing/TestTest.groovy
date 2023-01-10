@@ -24,8 +24,6 @@ import org.gradle.util.TestUtil
 
 class TestTest extends AbstractProjectBuilderSpec {
 
-    //todo: test for relative path
-
     def 'fails if custom executable does not exist'() {
         def task = project.tasks.create("test", Test)
         task.testClassesDirs = TestFiles.fixed(new File("tmp"))

@@ -19,26 +19,55 @@ package org.gradle.jvm.toolchain.internal;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.internal.deprecation.DeprecationLogger;
 
+import javax.annotation.Nullable;
 import java.io.File;
+import java.io.IOException;
 
 public class JavaExecutableUtils {
 
     public static File validateExecutable(String executable) {
         File executableFile = new File(executable);
         if (!executableFile.isAbsolute()) {
-            DeprecationLogger.deprecateBehaviour("Configuring an executable via a relative path (" + executable + ")")
-                    .withContext("Resolving relative file paths might yield unexpected results (" + new File(executable).getAbsoluteFile() + ")")
+            DeprecationLogger.deprecateBehaviour("Configuring an executable via a relative path (" + executable + ").")
+                    .withContext("Resolving relative file paths might yield unexpected results.")
                     .willBecomeAnErrorInGradle9()
                     .undocumented()
                     .nagUser();
         }
-        if (!executableFile.exists()) {
+        if (!executableFile.getAbsoluteFile().exists()) {
             throw new InvalidUserDataException("The configured executable does not exist (" + executableFile.getAbsolutePath() + ")");
         }
-        if (executableFile.isDirectory()) {
+        if (executableFile.getAbsoluteFile().isDirectory()) {
             throw new InvalidUserDataException("The configured executable is a directory (" + executableFile.getAbsolutePath() + ")");
         }
         return executableFile;
+    }
+
+    public static void validateExecutable(@Nullable String executable, String executableDescription, File referenceFile, String referenceDescription) {
+        if (executable == null) {
+            return;
+        }
+
+        File executableFile = validateExecutable(executable);
+        if (executableFile.equals(referenceFile)) {
+            return;
+        }
+
+        File canonicalExecutableFile = canonicalFile(executableFile);
+        File canonicalReferenceFile = canonicalFile(referenceFile);
+        if (canonicalExecutableFile.equals(canonicalReferenceFile)) {
+            return;
+        }
+
+        throw new IllegalStateException(executableDescription + " (" + executable + ") does not match " + referenceDescription + " (" + referenceFile + ")");
+    }
+
+    private static File canonicalFile(File file) {
+        try {
+            return file.getCanonicalFile();
+        } catch (IOException e) {
+            throw new RuntimeException("Can't resolve canonical path of file " + file);
+        }
     }
 
 }

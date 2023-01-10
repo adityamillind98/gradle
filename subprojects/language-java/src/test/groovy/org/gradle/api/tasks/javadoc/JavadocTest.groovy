@@ -53,8 +53,6 @@ class JavadocTest extends AbstractProjectBuilderSpec {
         }
     }
 
-    //todo: test for relative path
-
     def "execution uses the tool"() {
         task.getJavadocTool().set(tool)
 

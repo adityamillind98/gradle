@@ -17,6 +17,7 @@
 package org.gradle.api.tasks
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.internal.jvm.Jvm
 import org.gradle.test.fixtures.file.TestFile
 import spock.lang.Issue
 
@@ -66,7 +67,27 @@ class JavaExecIntegrationTest extends AbstractIntegrationSpec {
         """
     }
 
-    def "java exec is not incremental by default"() {
+    def "emits deprecation warning if executable specified as relative path"() {
+        given:
+        def executable = Jvm.current().javaExecutable
+        def relativePath = new File(".").getAbsoluteFile().toPath().relativize(executable.toPath())
+
+        buildFile << """
+            tasks.withType(JavaExec) {
+                executable = "$relativePath"
+            }
+        """
+
+        when:
+        executer.expectDeprecationWarning("Configuring an executable via a relative path (" + relativePath + "). " +
+                "This behavior has been deprecated. This will fail with an error in Gradle 9.0. Resolving relative file paths might yield unexpected results.")
+        run "run"
+
+        then:
+        executedAndNotSkipped ":run"
+    }
+
+    def "is not incremental by default"() {
         when:
         run "run"
 

@@ -24,8 +24,6 @@ import org.gradle.util.TestUtil
 
 class JavaExecTest extends AbstractProjectBuilderSpec {
 
-    //todo: test for relative path
-
     def 'fails if custom executable does not exist'() {
         def task = project.tasks.create("run", JavaExec)
         def invalidExecutable = temporaryFolder.file("invalid")

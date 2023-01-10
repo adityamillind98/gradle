@@ -270,10 +270,9 @@ public abstract class JavaCompile extends AbstractCompile implements HasCompileO
         );
 
         String customExecutablePath = forkOptions.getExecutable();
-        checkState(
-            customExecutablePath == null || JavaExecutableUtils.validateExecutable(customExecutablePath).equals(toolchainExecutable),
-            "Toolchain from `executable` property on `ForkOptions` does not match toolchain from `javaCompiler` property"
-        );
+        JavaExecutableUtils.validateExecutable(
+                customExecutablePath, "Toolchain from `executable` property on `ForkOptions`",
+                toolchainExecutable, "toolchain from `javaCompiler` property");
     }
 
     private boolean isToolchainCompatibleWithJava8() {

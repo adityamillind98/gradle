@@ -32,8 +32,6 @@ import spock.lang.Issue
 
 class JavaCompileTest extends AbstractProjectBuilderSpec {
 
-    //todo: test for relative path
-
     def "uses current JVM toolchain compiler as convention and sets source and target compatibility"() {
         def javaCompile = project.tasks.create('compileJava', JavaCompile)
         javaCompile.destinationDirectory.fileValue(new File('tmp'))

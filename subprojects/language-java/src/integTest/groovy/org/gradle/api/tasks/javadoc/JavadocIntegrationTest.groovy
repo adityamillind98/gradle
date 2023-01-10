@@ -19,6 +19,7 @@ import org.gradle.api.JavaVersion
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.AvailableJavaHomes
 import org.gradle.integtests.fixtures.TestResources
+import org.gradle.internal.jvm.Jvm
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
@@ -122,6 +123,30 @@ Joe! -->
         then:
         file("build/docs/javadoc/Foo.html").text.contains("""Hey
 Joe!""")
+    }
+
+    def "emits deprecation warning if executable specified as relative path"() {
+        given:
+        def executable = Jvm.current().javadocExecutable
+        def relativePath = new File(".").getAbsoluteFile().toPath().relativize(executable.toPath())
+
+        buildFile << """
+            task javadoc(type: Javadoc) {
+                destinationDir = file("build/javadoc")
+                source "src/main/java"
+                executable = "$relativePath"
+            }
+        """
+
+        writeSourceFile()
+
+        when:
+        executer.expectDeprecationWarning("Configuring an executable via a relative path (" + relativePath + "). " +
+                "This behavior has been deprecated. This will fail with an error in Gradle 9.0. Resolving relative file paths might yield unexpected results.")
+        run("javadoc")
+
+        then:
+        file("build/javadoc/Foo.html").exists()
     }
 
     @Issue("GRADLE-3152")
