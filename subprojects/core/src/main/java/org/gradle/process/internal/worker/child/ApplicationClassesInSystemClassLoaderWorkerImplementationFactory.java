@@ -195,6 +195,10 @@ public class ApplicationClassesInSystemClassLoaderWorkerImplementationFactory {
         if (!classpath.isEmpty()) {
             argumentList.addAll(Arrays.asList("-cp", Joiner.on(File.pathSeparator).join(classpath)));
         }
+
+        if (!argumentList.contains("-XX:+HeapDumpOnOutOfMemoryError")) {
+            argumentList.add("-XX:+HeapDumpOnOutOfMemoryError");
+        }
         return ArgWriter.argsFileGenerator(optionsFile, ArgWriter.javaStyleFactory()).transform(argumentList);
     }
 }
