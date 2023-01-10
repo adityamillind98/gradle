@@ -28,7 +28,7 @@ public class JavaExecutableUtils {
     public static File validateExecutable(String executable) {
         File executableFile = new File(executable);
         if (!executableFile.isAbsolute()) {
-            DeprecationLogger.deprecateBehaviour("Configuring an executable via a relative path (" + executable + ").")
+            DeprecationLogger.deprecateBehaviour("Configuring a Java executable via a relative path.")
                     .withContext("Resolving relative file paths might yield unexpected results.")
                     .willBecomeAnErrorInGradle9()
                     .undocumented()

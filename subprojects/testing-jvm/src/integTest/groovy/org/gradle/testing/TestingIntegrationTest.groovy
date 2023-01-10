@@ -429,16 +429,15 @@ class TestingIntegrationTest extends JUnitMultiVersionIntegrationSpec implements
     def "emits deprecation warning if executable specified as relative path"() {
         given:
         def executable = Jvm.current().javaExecutable
-        def relativePath = new File(".").getAbsoluteFile().toPath().relativize(executable.toPath())
 
         buildFile << """
             apply plugin:'java'
             test {
-                executable = "$relativePath"
+                executable = new File(".").getAbsoluteFile().toPath().relativize(new File("${executable}").toPath()).toString()
             }
         """
         when:
-        executer.expectDeprecationWarning("Configuring an executable via a relative path (" + relativePath + "). " +
+        executer.expectDeprecationWarning("Configuring a Java executable via a relative path. " +
                 "This behavior has been deprecated. This will fail with an error in Gradle 9.0. Resolving relative file paths might yield unexpected results.")
         executer
                 .requireDaemon()
