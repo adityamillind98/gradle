@@ -91,7 +91,6 @@ import static com.google.common.base.Preconditions.checkState;
  *     }
  * </pre>
  */
-@SuppressWarnings("MethodMayBeStatic")
 @CacheableTask
 public abstract class JavaCompile extends AbstractCompile implements HasCompileOptions {
     private final CompileOptions compileOptions;

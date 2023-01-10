@@ -438,7 +438,8 @@ class TestingIntegrationTest extends JUnitMultiVersionIntegrationSpec implements
         """
         when:
         executer.expectDeprecationWarning("Configuring a Java executable via a relative path. " +
-                "This behavior has been deprecated. This will fail with an error in Gradle 9.0. Resolving relative file paths might yield unexpected results.")
+                "This behavior has been deprecated. This will fail with an error in Gradle 9.0. " +
+                "Resolving relative file paths might yield unexpected results. Configure an absolute path to a Java executable instead.")
         executer
                 .requireDaemon()
                 .requireIsolatedDaemons()

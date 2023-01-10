@@ -30,6 +30,7 @@ public class JavaExecutableUtils {
         if (!executableFile.isAbsolute()) {
             DeprecationLogger.deprecateBehaviour("Configuring a Java executable via a relative path.")
                     .withContext("Resolving relative file paths might yield unexpected results.")
+                    .withAdvice("Configure an absolute path to a Java executable instead.")
                     .willBecomeAnErrorInGradle9()
                     .undocumented()
                     .nagUser();

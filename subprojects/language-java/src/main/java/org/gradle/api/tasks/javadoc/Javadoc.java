@@ -102,7 +102,6 @@ import static org.gradle.util.internal.GUtil.isTrue;
  * }
  * </pre>
  */
-@SuppressWarnings("MethodMayBeStatic")
 @CacheableTask
 public abstract class Javadoc extends SourceTask {
 
