@@ -59,7 +59,7 @@ public class JavaExecutableUtils {
             return;
         }
 
-        throw new IllegalStateException(executableDescription + " (" + executable + ") does not match " + referenceDescription + " (" + referenceFile + ")");
+        throw new IllegalStateException(executableDescription + " does not match " + referenceDescription + ".");
     }
 
     private static File canonicalFile(File file) {
