@@ -180,15 +180,13 @@ fun Project.createTestTask(name: String, executer: String, sourceSet: SourceSet,
 private
 fun IntegrationTest.setUpAgentIfNeeded(testType: TestType, executer: String) {
     val integTestUseAgentSysPropName = "org.gradle.integtest.agent.allowed"
-    if (project.hasProperty(integTestUseAgentSysPropName)) {
-        val shouldUseAgent = (project.property(integTestUseAgentSysPropName) as? String).toBoolean()
-        systemProperties[integTestUseAgentSysPropName] = shouldUseAgent.toString()
+    val shouldUseAgent = (project.findProperty(integTestUseAgentSysPropName) as? String ?: "true").toBoolean()
+    systemProperties[integTestUseAgentSysPropName] = shouldUseAgent.toString()
 
-        if (shouldUseAgent && executer == "embedded") {
-            jvmArgumentProviders.add(project.objects.newInstance<AgentsClasspathProvider>().apply {
-                agentsClasspath.from(project.configurations["${testType.prefix}TestAgentsClasspath"])
-            })
-        }
+    if (shouldUseAgent && executer == "embedded") {
+        jvmArgumentProviders.add(project.objects.newInstance<AgentsClasspathProvider>().apply {
+            agentsClasspath.from(project.configurations["${testType.prefix}TestAgentsClasspath"])
+        })
     }
 }
 
