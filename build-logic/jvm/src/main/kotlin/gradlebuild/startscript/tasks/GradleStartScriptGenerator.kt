@@ -115,7 +115,7 @@ abstract class GradleStartScriptGenerator : DefaultTask() {
                     line + separator + "DEFAULT_JVM_OPTS=\"\$DEFAULT_JVM_OPTS ${getAgentOptions("\$APP_HOME").joinToString(separator = " ", prefix = "'", postfix = "'")}\""
 
                 line.startsWith("set DEFAULT_JVM_OPTS") ->
-                    line + separator + "set DEFAULT_JVM_OPTS=%DEFAULT_JVM_OPTS% ${getAgentOptions("%APP_HOME%").joinToString(separator = " ", prefix = "\"", postfix = "\"")}\""
+                    line + separator + "set DEFAULT_JVM_OPTS=%DEFAULT_JVM_OPTS% ${getAgentOptions("%APP_HOME%").joinToString(separator = " ", prefix = "\"", postfix = "\"")}"
 
                 else -> line
             }
