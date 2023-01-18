@@ -129,8 +129,9 @@ class CppToolChainChangesIntegrationTest extends AbstractIntegrationSpec {
         def availableToolChains = AvailableToolChains.toolChains.findAll {
             it.available && !(it instanceof AvailableToolChains.InstalledSwiftc)
         }
+        println("Available toolchains: ${availableToolChains}")
         int numberOfToolChains = availableToolChains.size()
-        Assume.assumeTrue('2 or more tool chains are required for this test', numberOfToolChains >= 2)
+        Assume.assumeTrue("2 or more tool chains are required for this test but ${availableToolChains}", numberOfToolChains >= 2)
         List<List<InstalledToolChain>> result = (0..<(numberOfToolChains - 1)).collectMany { first ->
             ((first + 1)..<numberOfToolChains).collect { second ->
                 [availableToolChains[first], availableToolChains[second]]
