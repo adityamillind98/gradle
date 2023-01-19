@@ -17,10 +17,12 @@ package org.gradle.integtests
 
 import groovy.io.FileType
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import spock.lang.Ignore
 import spock.lang.IgnoreIf
 
 @IgnoreIf({ GradleContextualExecuter.embedded }) // wrapperExecuter requires a real distribution
 class WrapperIntegrationTest extends AbstractWrapperIntegrationSpec {
+    @Ignore("Fails because of race between daemon shutdown and deleting the file")
     def "can recover from a broken distribution"() {
         buildFile << "task hello"
         prepareWrapper()
