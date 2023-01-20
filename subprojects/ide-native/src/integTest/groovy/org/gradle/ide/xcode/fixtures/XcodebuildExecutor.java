@@ -100,14 +100,20 @@ public class XcodebuildExecutor {
         return fails(XcodeAction.BUILD);
     }
 
+    // Xcode 14.2 seems to return the error in the format
+    // that can't be recognized by OutputScrapingExecutionFailure.
+    // Returns raw output of `xcodebuild`
+    public ExecOutput execWithFailure(XcodeAction action) {
+        withArgument(action.toString());
+        return findXcodeBuild().execWithFailure(args, buildEnvironment(testDirectory));
+    }
+
     public ExecutionFailure fails(XcodeAction action) {
         withArgument(action.toString());
         ExecOutput result = findXcodeBuild().execWithFailure(args, buildEnvironment(testDirectory));
         // stderr of Gradle is redirected to stdout of xcodebuild tool. To work around, we consider xcodebuild stdout and stderr as
         // the error output only if xcodebuild failed most likely due to Gradle.
-        System.out.println("STDOUT: ");
         System.out.println(result.getOut());
-        System.out.println("STDERR: ");
         System.out.println(result.getError());
         return OutputScrapingExecutionFailure.from(result.getOut(), result.getError());
     }
