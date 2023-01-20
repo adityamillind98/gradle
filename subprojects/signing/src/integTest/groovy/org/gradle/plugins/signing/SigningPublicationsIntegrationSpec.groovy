@@ -328,10 +328,6 @@ class SigningPublicationsIntegrationSpec extends SigningIntegrationSpec {
                 repositories {
                     ivy {
                         url "file://\$buildDir/ivyRepo/"
-                        patternLayout {
-                            artifact "[artifact]-[revision](-[classifier])(.[ext])"
-                            ivy "[artifact]-[revision](-[classifier])(.[ext])"
-                        }
                     }
                 }
             }
@@ -355,11 +351,8 @@ class SigningPublicationsIntegrationSpec extends SigningIntegrationSpec {
         ivyRepoFile("ivy-${version}.xml.asc").assertExists()
         ivyRepoFile("$artifactId-${version}-source.jar").assertExists()
         ivyRepoFile("$artifactId-${version}-source.jar.asc").assertExists()
-        ivyRepoFile("$artifactId-${version}.module").assertDoesNotExist()
-        ivyRepoFile("$artifactId-${version}.module.asc").assertDoesNotExist()
-
-        and:
-        outputContains "Publication of Gradle Module Metadata is disabled because you have configured an Ivy repository with a non-standard layout"
+        ivyRepoFile("$artifactId-${version}.module").assertExists()
+        ivyRepoFile("$artifactId-${version}.module.asc").assertExists()
     }
 
     def "sign task takes into account configuration changes"() {
@@ -541,10 +534,6 @@ class SigningPublicationsIntegrationSpec extends SigningIntegrationSpec {
                     }
                     ivy {
                         url "file://\$buildDir/ivyRepo/"
-                        patternLayout {
-                            artifact "[artifact]-[revision](-[classifier])(.[ext])"
-                            ivy "[artifact]-[revision](-[classifier])(.[ext])"
-                        }
                     }
                 }
             }
@@ -605,10 +594,6 @@ class SigningPublicationsIntegrationSpec extends SigningIntegrationSpec {
                     }
                     ivy {
                         url "file://\$buildDir/ivyRepo/"
-                        patternLayout {
-                            artifact "[artifact]-[revision](-[classifier])(.[ext])"
-                            ivy "[artifact]-[revision](-[classifier])(.[ext])"
-                        }
                     }
                 }
             }

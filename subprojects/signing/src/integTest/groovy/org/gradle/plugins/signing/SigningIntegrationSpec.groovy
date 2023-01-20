@@ -145,7 +145,7 @@ abstract class SigningIntegrationSpec extends AbstractIntegrationSpec {
     }
 
     TestFile ivyRepoFile(String name) {
-        file("build", "ivyRepo", name)
+        file("build", "ivyRepo", "sign", artifactId, version, name)
     }
 
     TestFile fileRepoFile(String name) {
