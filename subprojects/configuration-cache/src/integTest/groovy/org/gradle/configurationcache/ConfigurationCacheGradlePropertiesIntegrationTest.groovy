@@ -16,7 +16,7 @@
 
 package org.gradle.configurationcache
 
-import groovy.test.NotYetImplemented
+
 import org.gradle.configurationcache.fixtures.BuildLogicChangeFixture
 import spock.lang.Issue
 
@@ -151,9 +151,9 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
     }
 
     @Issue("https://github.com/gradle/gradle/issues/19184")
-    @NotYetImplemented
     def "system properties from included build properties file"() {
         given:
+        String systemProp = "fromPropertiesFile"
         def configurationCache = newConfigurationCacheFixture()
         def fixture = new BuildLogicChangeFixture(file('build-logic'))
         fixture.setup()
@@ -167,10 +167,10 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
 
             println(providers.systemProperty('fromPropertiesFile').orNull + "!")
         """
-        file('build-logic/gradle.properties') << 'systemProp.fromPropertiesFile=42'
+        file('build-logic/gradle.properties') << 'systemProp.$systemProp=42'
 
         when:
-        System.clearProperty('fromPropertiesFile')
+        System.clearProperty("$systemProp")
         configurationCacheRun fixture.task
 
         then:
@@ -179,15 +179,52 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
         configurationCache.assertStateStored()
 
         when:
-        System.clearProperty('fromPropertiesFile')
+        System.clearProperty("$systemProp")
         configurationCacheRun fixture.task
 
         then:
-        outputDoesNotContain "because system property 'fromPropertiesFile' has changed"
+        outputDoesNotContain "because system property '$systemProp' has changed"
         outputContains fixture.expectedOutputBeforeChange
         configurationCache.assertStateLoaded()
 
         cleanup:
-        System.clearProperty('fromPropertiesFile')
+        System.clearProperty("$systemProp")
+    }
+
+    def "same system property from multiple included build properties files"() {
+        given:
+        String systemProp = "fromPropertiesFile"
+        def configurationCache = newConfigurationCacheFixture()
+
+        settingsFile << """
+            includeBuild("included-build-1")
+            includeBuild("included-build-2")
+        """
+        buildFile << "task ok"
+
+        file("included-build-1/build.gradle") << "println(providers.systemProperty('$systemProp').orNull + '!')"
+        file("included-build-1/gradle.properties") << "systemProp.$systemProp = 42"
+
+        file("included-build-2/build.gradle") << "println(providers.systemProperty('$systemProp').orNull + '!')"
+        file("included-build-2/gradle.properties") << "systemProp.$systemProp = 12"
+
+        when:
+        System.clearProperty("$systemProp")
+        configurationCacheRun "ok"
+
+        then:
+        configurationCache.assertStateStored()
+        outputContains "12!"
+
+        when:
+        System.clearProperty("$systemProp")
+        configurationCacheRun "ok"
+
+        then:
+        outputDoesNotContain "because system property '$systemProp' has changed"
+        configurationCache.assertStateLoaded()
+
+        cleanup:
+        System.clearProperty("$systemProp")
     }
 }

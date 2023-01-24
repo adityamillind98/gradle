@@ -53,7 +53,7 @@ import org.gradle.configurationcache.serialization.writeCollection
 import org.gradle.configurationcache.serialization.writeEnum
 import org.gradle.configurationcache.serialization.writeFile
 import org.gradle.configurationcache.serialization.writeStrings
-import org.gradle.configurationcache.services.EnvironmentChangeTracker
+import org.gradle.configurationcache.services.DefaultEnvironmentChangeTracker
 import org.gradle.execution.plan.Node
 import org.gradle.initialization.BuildIdentifiedProgressDetails
 import org.gradle.initialization.BuildStructureOperationProject
@@ -674,14 +674,14 @@ class ConfigurationCacheState(
 
     private
     suspend fun DefaultWriteContext.writeCachedEnvironmentState(gradle: GradleInternal) {
-        val environmentChangeTracker = gradle.serviceOf<EnvironmentChangeTracker>()
+        val environmentChangeTracker = gradle.serviceOf<DefaultEnvironmentChangeTracker>()
         write(environmentChangeTracker.getCachedState())
     }
 
     private
     suspend fun DefaultReadContext.readCachedEnvironmentState(gradle: GradleInternal) {
-        val environmentChangeTracker = gradle.serviceOf<EnvironmentChangeTracker>()
-        val storedState = read() as EnvironmentChangeTracker.CachedEnvironmentState
+        val environmentChangeTracker = gradle.serviceOf<DefaultEnvironmentChangeTracker>()
+        val storedState = read() as DefaultEnvironmentChangeTracker.CachedEnvironmentState
         environmentChangeTracker.loadFrom(storedState)
     }
 

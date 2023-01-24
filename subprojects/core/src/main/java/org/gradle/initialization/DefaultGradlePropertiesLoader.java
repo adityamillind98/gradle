@@ -34,9 +34,12 @@ public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
     private final StartParameterInternal startParameter;
     private final Environment environment;
 
-    public DefaultGradlePropertiesLoader(StartParameterInternal startParameter, Environment environment) {
+    private final EnvironmentChangeTracker environmentChangeTracker;
+
+    public DefaultGradlePropertiesLoader(StartParameterInternal startParameter, Environment environment, EnvironmentChangeTracker environmentChangeTracker) {
         this.startParameter = startParameter;
         this.environment = environment;
+        this.environmentChangeTracker = environmentChangeTracker;
     }
 
     @Override
@@ -97,7 +100,9 @@ public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
         int prefixLength = prefix.length();
         for (String key : properties.keySet()) {
             if (key.length() > prefixLength && key.startsWith(prefix)) {
-                System.setProperty(key.substring(prefixLength), uncheckedNonnullCast(properties.get(key)));
+                String keyWithoutPrefix = key.substring(prefixLength);
+                environmentChangeTracker.systemPropertyChanged(keyWithoutPrefix, properties.get(key), null);
+                System.setProperty(keyWithoutPrefix, uncheckedNonnullCast(properties.get(key)));
             }
         }
     }

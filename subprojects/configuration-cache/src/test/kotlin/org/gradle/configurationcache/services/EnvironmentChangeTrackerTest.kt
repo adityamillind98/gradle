@@ -23,7 +23,7 @@ import org.junit.Test
 
 class EnvironmentChangeTrackerTest {
     private
-    val tracker = EnvironmentChangeTracker(DefaultProblemFactory(DefaultUserCodeApplicationContext(), { _, _ -> null }))
+    val tracker = DefaultEnvironmentChangeTracker(DefaultProblemFactory(DefaultUserCodeApplicationContext(), { _, _ -> null }))
 
     @Test
     fun `can load state after capturing`() {
@@ -47,5 +47,5 @@ class EnvironmentChangeTrackerTest {
     }
 
     private
-    fun emptyEnvironmentState() = EnvironmentChangeTracker.CachedEnvironmentState(cleared = false, updates = listOf(), removals = listOf())
+    fun emptyEnvironmentState() = DefaultEnvironmentChangeTracker.CachedEnvironmentState(cleared = false, updates = listOf(), removals = listOf())
 }

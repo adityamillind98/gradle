@@ -61,7 +61,7 @@ import org.gradle.configurationcache.problems.PropertyTrace
 import org.gradle.configurationcache.problems.StructuredMessage
 import org.gradle.configurationcache.serialization.DefaultWriteContext
 import org.gradle.configurationcache.services.ConfigurationCacheEnvironment
-import org.gradle.configurationcache.services.EnvironmentChangeTracker
+import org.gradle.configurationcache.services.DefaultEnvironmentChangeTracker
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.groovy.scripts.internal.ScriptSourceListener
 import org.gradle.internal.buildoption.FeatureFlag
@@ -91,7 +91,7 @@ class ConfigurationCacheFingerprintWriter(
     private val fileCollectionFactory: FileCollectionFactory,
     private val directoryFileTreeFactory: DirectoryFileTreeFactory,
     private val taskExecutionTracker: TaskExecutionTracker,
-    private val environmentChangeTracker: EnvironmentChangeTracker,
+    private val environmentChangeTracker: DefaultEnvironmentChangeTracker,
     private val inputTrackingState: InputTrackingState,
 ) : ValueSourceProviderFactory.ValueListener,
     ValueSourceProviderFactory.ComputationListener,

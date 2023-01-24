@@ -18,8 +18,7 @@ package org.gradle.configurationcache.services
 
 import org.gradle.configurationcache.problems.ProblemFactory
 import org.gradle.configurationcache.problems.PropertyTrace
-import org.gradle.internal.service.scopes.Scopes
-import org.gradle.internal.service.scopes.ServiceScope
+import org.gradle.initialization.EnvironmentChangeTracker
 import java.util.concurrent.ConcurrentHashMap
 
 
@@ -33,19 +32,19 @@ import java.util.concurrent.ConcurrentHashMap
  * Mode selection happens upon the first use of the class. Calling an operation that isn't supported in the current
  * mode results in the IllegalStateException.
  */
-@ServiceScope(Scopes.BuildTree::class)
+
 internal
-class EnvironmentChangeTracker(private val problemFactory: ProblemFactory) {
+class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory) : EnvironmentChangeTracker {
     private
     val mode = ModeHolder()
+
+    override fun systemPropertyChanged(key: Any, value: Any?, consumer: String?) = mode.toTrackingMode().systemPropertyChanged(key, value, consumer)
 
     fun isSystemPropertyMutated(key: String) = mode.toTrackingMode().isSystemPropertyMutated(key)
 
     fun loadFrom(storedState: CachedEnvironmentState) = mode.toRestoringMode().loadFrom(storedState)
 
     fun getCachedState() = mode.toTrackingMode().getCachedState()
-
-    fun systemPropertyChanged(key: Any, value: Any?, consumer: String) = mode.toTrackingMode().systemPropertyChanged(key, value, consumer)
 
     fun systemPropertyRemoved(key: Any) = mode.toTrackingMode().systemPropertyRemoved(key)
 
@@ -117,7 +116,7 @@ class EnvironmentChangeTracker(private val problemFactory: ProblemFactory) {
             )
         }
 
-        fun systemPropertyChanged(key: Any, value: Any?, consumer: String) {
+        fun systemPropertyChanged(key: Any, value: Any?, consumer: String?) {
             mutatedSystemProperties[key] = SystemPropertySet(key, value, problemFactory.locationForCaller(consumer))
         }
 

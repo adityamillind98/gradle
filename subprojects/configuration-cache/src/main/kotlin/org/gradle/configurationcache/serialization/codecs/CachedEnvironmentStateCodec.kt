@@ -23,13 +23,13 @@ import org.gradle.configurationcache.serialization.WriteContext
 import org.gradle.configurationcache.serialization.readList
 import org.gradle.configurationcache.serialization.withPropertyTrace
 import org.gradle.configurationcache.serialization.writeCollection
-import org.gradle.configurationcache.services.EnvironmentChangeTracker
+import org.gradle.configurationcache.services.DefaultEnvironmentChangeTracker
 
 
 internal
-object CachedEnvironmentStateCodec : Codec<EnvironmentChangeTracker.CachedEnvironmentState> {
+object CachedEnvironmentStateCodec : Codec<DefaultEnvironmentChangeTracker.CachedEnvironmentState> {
 
-    override suspend fun WriteContext.encode(value: EnvironmentChangeTracker.CachedEnvironmentState) {
+    override suspend fun WriteContext.encode(value: DefaultEnvironmentChangeTracker.CachedEnvironmentState) {
         writeBoolean(value.cleared)
 
         writeCollection(value.updates) { update ->
@@ -52,19 +52,19 @@ object CachedEnvironmentStateCodec : Codec<EnvironmentChangeTracker.CachedEnviro
         }
     }
 
-    override suspend fun ReadContext.decode(): EnvironmentChangeTracker.CachedEnvironmentState {
+    override suspend fun ReadContext.decode(): DefaultEnvironmentChangeTracker.CachedEnvironmentState {
         val cleared = readBoolean()
         val updates = readList {
             val key = read() as Any
             val value = read()
-            EnvironmentChangeTracker.SystemPropertySet(key, value, PropertyTrace.Unknown)
+            DefaultEnvironmentChangeTracker.SystemPropertySet(key, value, PropertyTrace.Unknown)
         }
 
         val removals = readList {
             val key = readString()
-            EnvironmentChangeTracker.SystemPropertyRemove(key)
+            DefaultEnvironmentChangeTracker.SystemPropertyRemove(key)
         }
 
-        return EnvironmentChangeTracker.CachedEnvironmentState(cleared, updates, removals)
+        return DefaultEnvironmentChangeTracker.CachedEnvironmentState(cleared, updates, removals)
     }
 }
