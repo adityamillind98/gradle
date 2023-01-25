@@ -16,8 +16,19 @@
 package org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies;
 
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
-import org.gradle.internal.component.local.model.BuildableLocalConfigurationMetadata;
+import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata;
+import org.gradle.internal.component.local.model.LocalConfigurationMetadata;
+import org.gradle.internal.model.CalculatedValueContainerFactory;
+import org.gradle.internal.model.ModelContainer;
 
+/**
+ * Builds {@link LocalConfigurationMetadata} instances from {@link ConfigurationInternal}s.
+ */
 public interface LocalConfigurationMetadataBuilder {
-    void addDependenciesAndExcludes(BuildableLocalConfigurationMetadata metaData, ConfigurationInternal configuration);
+    LocalConfigurationMetadata create(
+        ConfigurationInternal configuration,
+        DefaultLocalComponentMetadata parent,
+        ModelContainer<?> model,
+        CalculatedValueContainerFactory calculatedValueContainerFactory
+    );
 }

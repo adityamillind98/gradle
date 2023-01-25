@@ -150,6 +150,27 @@ class LazyTest extends Specification {
         Lazy.locking()::of       | "locking"
     }
 
+    def "#factoryName lazy reports if it is realized"() {
+        def supplier = Mock(Supplier)
+
+        when:
+        def lazy = factory(supplier)
+
+        then:
+        !lazy.realized
+
+        when:
+        lazy.get()
+
+        then:
+        lazy.realized
+
+        where:
+        factory                  | factoryName
+        Lazy.unsafe()::of        | "unsafe"
+        Lazy.locking()::of       | "locking"
+    }
+
     def "locking lazy can handle concurrent threads"() {
         def supplier = Mock(Supplier)
         Lazy<Integer> lazy = Lazy.locking().of(supplier)

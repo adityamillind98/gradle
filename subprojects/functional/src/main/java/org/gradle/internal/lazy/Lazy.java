@@ -63,6 +63,12 @@ public interface Lazy<T> extends Supplier<T> {
         return unsafe().of(() -> mapper.apply(get()));
     }
 
+    /**
+     * Determines if this lazy value has been realized or if it remains in its unrealized state.
+     * This method should be avoided except for verifying laziness during testing.
+     */
+    boolean isRealized();
+
     static Factory unsafe() {
         return UnsafeLazy::new;
     }

@@ -26,7 +26,8 @@ import javax.annotation.Nullable;
 /**
  * Metadata for a basic variant of a component, that defines only artifacts and no dependencies.
  */
-public interface VariantResolveMetadata extends VariantGraphResolveMetadata.Subvariant {
+public interface VariantResolveMetadata {
+
     String getName();
 
     /**

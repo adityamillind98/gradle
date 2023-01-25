@@ -15,7 +15,7 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine
 
-import com.google.common.collect.ImmutableSet
+
 import org.apache.ivy.core.module.id.ModuleRevisionId
 import org.gradle.api.Action
 import org.gradle.api.artifacts.DependencySet
@@ -56,6 +56,7 @@ import org.gradle.internal.component.external.model.DefaultModuleComponentIdenti
 import org.gradle.internal.component.external.model.ImmutableCapabilities
 import org.gradle.internal.component.local.model.DefaultLocalComponentGraphResolveState
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata
+import org.gradle.internal.component.local.model.DefaultLocalConfigurationMetadata
 import org.gradle.internal.component.local.model.DslOriginDependencyMetadataWrapper
 import org.gradle.internal.component.model.ComponentOverrideMetadata
 import org.gradle.internal.component.model.ComponentResolveMetadata
@@ -88,7 +89,7 @@ class DependencyGraphBuilderTest extends Specification {
     def metaDataResolver = Mock(ComponentMetaDataResolver)
     def attributesSchema = Mock(AttributesSchemaInternal)
     def attributes = ImmutableAttributes.EMPTY
-    def root = rootProject('root', '1.0', ['root'])
+    def root = rootProject()
     def moduleReplacements = Mock(ModuleReplacementsData)
     def moduleIdentifierFactory = Mock(ImmutableModuleIdentifierFactory) {
         module(_, _) >> { args ->
@@ -1023,19 +1024,38 @@ class DependencyGraphBuilderTest extends Specification {
     def revision(String name, String revision = '1.0') {
         // TODO Shouldn't really be using the local component implementation here
         def id = newId("group", name, revision)
-        def metaData = new DefaultLocalComponentMetadata(id, DefaultModuleComponentIdentifier.newId(id), "release", attributesSchema, RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory())
-        def defaultConfiguration = metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ImmutableSet.of("default"), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
-        defaultConfiguration.addArtifacts([new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))])
+        def metaData = new DefaultLocalComponentMetadata(id, DefaultModuleComponentIdentifier.newId(id), "release", attributesSchema, RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory(), null)
+
+        def artifacts = [new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))]
+        def defaultConfiguration = new DefaultLocalConfigurationMetadata(
+            "default", "defaultConfig", metaData.id, true, true, ["default"] as Set, attributes, ImmutableCapabilities.EMPTY,
+            true, null, true, [], [], [], [], [] as Set, [],
+            [] as Set, artifacts, RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory(), metaData
+        )
+
+        metaData.addConfiguration(defaultConfiguration)
         return metaData
     }
 
-    def rootProject(String name, String revision = '1.0', List<String> extraConfigs = []) {
-        def metaData = new DefaultLocalComponentMetadata(newId("group", name, revision), newProjectId(":${name}"), "release", attributesSchema, RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory())
-        def defaultConfiguration = metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ImmutableSet.of("default"), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
-        extraConfigs.each { String config ->
-            metaData.addConfiguration(config, "${config}Config", ["default"] as Set<String>, ImmutableSet.of("default", config), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
-        }
-        defaultConfiguration.addArtifacts([new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))])
+    def rootProject() {
+        // TODO Shouldn't really be using the local component implementation here
+        def metaData = new DefaultLocalComponentMetadata(newId("group", "root", "1.0"), newProjectId(":root"), "release", attributesSchema, RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory(), null)
+
+        def artifacts = [new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))]
+        def defaultConfiguration = new DefaultLocalConfigurationMetadata(
+            "default", "defaultConfig", metaData.id, true, true, ["default"] as Set, attributes, ImmutableCapabilities.EMPTY,
+            true, null, true, [], [], [], [], [] as Set, [],
+            [] as Set, artifacts, RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory(), metaData
+        )
+
+        def rootConfiguration = new DefaultLocalConfigurationMetadata(
+            "root", "rootConfig", metaData.id, true, true, ["default", "root"] as Set, attributes, ImmutableCapabilities.EMPTY,
+            true, null, true, [], [], [], defaultConfiguration.getDependencies(), [] as Set, [],
+            [] as Set, [], RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory(), metaData
+        )
+
+        metaData.addConfiguration(defaultConfiguration)
+        metaData.addConfiguration(rootConfiguration)
         return metaData
     }
 
@@ -1111,7 +1131,7 @@ class DependencyGraphBuilderTest extends Specification {
         dependencyMetaData = new DslOriginDependencyMetadataWrapper(dependencyMetaData, Stub(ModuleDependency) {
             getAttributes() >> ImmutableAttributes.EMPTY
         })
-        from.getConfiguration("default").addDependency(dependencyMetaData)
+        from.getConfiguration("default").getDependencies().add(dependencyMetaData)
         return dependencyMetaData
     }
 

@@ -16,76 +16,101 @@
 
 package org.gradle.internal.component.local.model
 
-import com.google.common.collect.ImmutableSet
+
+import org.gradle.api.NamedDomainObjectContainer
+import org.gradle.api.artifacts.ConfigurationPublications
+import org.gradle.api.artifacts.ConfigurationVariant
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.DependencyConstraint
+import org.gradle.api.artifacts.DependencyConstraintSet
+import org.gradle.api.artifacts.DependencySet
+import org.gradle.api.artifacts.ExcludeRule
+import org.gradle.api.artifacts.ExternalModuleDependency
+import org.gradle.api.artifacts.FileCollectionDependency
+import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.PublishArtifact
-import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
+import org.gradle.api.artifacts.PublishArtifactSet
+import org.gradle.api.artifacts.component.ComponentIdentifier
+import org.gradle.api.attributes.AttributeContainer
+import org.gradle.api.internal.artifacts.DefaultDependencySet
+import org.gradle.api.internal.artifacts.DefaultExcludeRule
+import org.gradle.api.internal.artifacts.DefaultImmutableModuleIdentifierFactory
 import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier
 import org.gradle.api.internal.artifacts.DefaultPublishArtifactSet
+import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DefaultExcludeRuleConverter
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DefaultLocalConfigurationMetadataBuilder
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DependencyDescriptorFactory
 import org.gradle.api.internal.artifacts.publish.DefaultPublishArtifact
-import org.gradle.api.internal.attributes.AttributeContainerInternal
 import org.gradle.api.internal.attributes.AttributesSchemaInternal
 import org.gradle.api.internal.attributes.ImmutableAttributes
 import org.gradle.api.internal.file.TestFiles
 import org.gradle.api.internal.initialization.RootScriptDomainObjectContext
+import org.gradle.api.internal.tasks.TaskDependencyFactory
 import org.gradle.api.tasks.TaskDependency
-import org.gradle.internal.DisplayName
-import org.gradle.internal.component.external.descriptor.DefaultExclude
+import org.gradle.internal.Describables
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier
-import org.gradle.internal.component.external.model.ImmutableCapabilities
 import org.gradle.internal.component.model.DefaultIvyArtifactName
 import org.gradle.internal.component.model.IvyArtifactName
 import org.gradle.internal.component.model.LocalOriginDependencyMetadata
-import org.gradle.internal.component.model.VariantResolveMetadata
 import org.gradle.util.TestUtil
-import org.gradle.util.internal.WrapUtil
 import spock.lang.Specification
 
+/**
+ * Tests {@link DefaultLocalComponentMetadata}.
+ *
+ * TODO: This class currently tests a lot of the functionality of
+ * {@link DefaultLocalConfigurationMetadataBuilder}. That class should either be merged
+ * with {@link DefaultLocalComponentMetadata}, or the relevant tests should be moved
+ * to the builder's test class.
+ */
 class DefaultLocalComponentMetadataTest extends Specification {
     def id = DefaultModuleVersionIdentifier.newId("group", "module", "version")
     def componentIdentifier = DefaultModuleComponentIdentifier.newId(id)
-    def metadata = createMetadata()
 
-    protected DefaultLocalComponentMetadata createMetadata() {
-        new DefaultLocalComponentMetadata(id, componentIdentifier, "status", Mock(AttributesSchemaInternal), RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory())
-    }
+    def metadataBuilder = new DefaultLocalConfigurationMetadataBuilder(
+        new TestDependencyMetadataFactory(),
+        new DefaultExcludeRuleConverter(new DefaultImmutableModuleIdentifierFactory())
+    )
+
+    def component = new DefaultLocalComponentMetadata(
+        id, componentIdentifier, "status", Mock(AttributesSchemaInternal),
+        RootScriptDomainObjectContext.INSTANCE, TestUtil.calculatedValueContainerFactory(), metadataBuilder
+    )
 
     def "can lookup configuration after it has been added"() {
         when:
-        metadata.addConfiguration("super", "description", [] as Set<String>, ImmutableSet.of("super"), false, false, null, true, null, true, ImmutableCapabilities.EMPTY)
-        metadata.addConfiguration("conf", "description", ["super"] as Set, ImmutableSet.of("super", "conf"), true, true, null, true, null, true, ImmutableCapabilities.EMPTY)
+        def parent = register("parent")
+        register("conf", [parent])
 
         then:
-        metadata.configurationNames == ['conf', 'super'] as Set
+        component.configurationNames == ['conf', 'parent'] as Set
 
-        def conf = metadata.getConfiguration('conf')
-        conf != null
-        conf.visible
-        conf.transitive
-        conf.hierarchy == ['conf', 'super'] as Set
+        def confMd = component.getConfiguration('conf')
+        confMd != null
+        confMd.hierarchy == ['conf', 'parent'] as Set
 
-        def superConf = metadata.getConfiguration('super')
-        superConf != null
-        !superConf.visible
-        !superConf.transitive
-        superConf.hierarchy == ['super'] as Set
+        def parentMd = component.getConfiguration('parent')
+        parentMd != null
+        parentMd.hierarchy == ['parent'] as Set
     }
 
     def "configuration has no dependencies or artifacts when none have been added"() {
         when:
-        metadata.addConfiguration("super", "description", [] as Set<String>, ImmutableSet.of("super"), false, false, ImmutableAttributes.EMPTY, true, null, true, ImmutableCapabilities.EMPTY)
-        metadata.addConfiguration("conf", "description", ["super"] as Set, ImmutableSet.of("super", "conf"), true, true, ImmutableAttributes.EMPTY, true, null, true, ImmutableCapabilities.EMPTY)
+        def parent = register("parent")
+        register("conf", [parent])
 
         then:
-        def conf = metadata.getConfiguration('conf')
-        conf.dependencies.empty
-        conf.excludes.empty
-        conf.files.empty
+        def confMd = component.getConfiguration('conf')
+        confMd.dependencies.empty
+        confMd.excludes.empty
+        confMd.files.empty
 
         when:
-        conf.prepareToResolveArtifacts()
+        confMd.prepareToResolveArtifacts()
 
         then:
-        conf.artifacts.empty
+        confMd.artifacts.empty
     }
 
     def "can lookup artifact in various ways after it has been added"() {
@@ -93,22 +118,23 @@ class DefaultLocalComponentMetadataTest extends Specification {
         def file = new File("artifact.zip")
 
         given:
-        def conf = addConfiguration("conf")
+        def conf = register("conf")
+        conf.artifacts.add(createArtifact(artifact, file))
 
         when:
-        addArtifact(conf, artifact, file)
-        conf.prepareToResolveArtifacts()
+        def confMd = component.getConfiguration("conf")
+        confMd.prepareToResolveArtifacts()
 
         then:
-        metadata.getConfiguration("conf").artifacts.size() == 1
+        confMd.artifacts.size() == 1
+        def publishArtifact = confMd.artifacts.first()
 
-        def publishArtifact = metadata.getConfiguration("conf").artifacts.first()
         publishArtifact.id
         publishArtifact.name.name == artifact.name
         publishArtifact.name.type == artifact.type
         publishArtifact.name.extension == artifact.extension
         publishArtifact.file == file
-        publishArtifact == metadata.getConfiguration("conf").artifact(artifact)
+        publishArtifact == confMd.artifact(artifact)
     }
 
     def "artifact is attached to child configurations"() {
@@ -120,41 +146,27 @@ class DefaultLocalComponentMetadataTest extends Specification {
         def file3 = new File("artifact-3.zip")
 
         given:
-        def conf1 = addConfiguration("conf1")
-        def conf2 = addConfiguration("conf2")
-        def child1 = addConfiguration("child1", ["conf1", "conf2"])
-        def child2 = addConfiguration("child2", ["conf1"])
+        def conf1 = register("conf1")
+        def conf2 = register("conf2")
+        def child1 = register("child1", [conf1, conf2])
+        register("child2", [conf1])
+
+        conf1.artifacts.add(createArtifact(artifact1, file1))
+        conf2.artifacts.add(createArtifact(artifact2, file2))
+        child1.artifacts.add(createArtifact(artifact3, file3))
 
         when:
-        addArtifact(conf1, artifact1, file1)
-        addArtifact(conf2, artifact2, file2)
-        addArtifact(child1, artifact3, file3)
-        conf1.prepareToResolveArtifacts()
-        child1.prepareToResolveArtifacts()
-        child2.prepareToResolveArtifacts()
+        def conf1Md = component.getConfiguration("conf1")
+        def conf2Md = component.getConfiguration("child1")
+        def child2Md = component.getConfiguration("child2")
+        conf1Md.prepareToResolveArtifacts()
+        conf2Md.prepareToResolveArtifacts()
+        child2Md.prepareToResolveArtifacts()
 
         then:
-        metadata.getConfiguration("conf1").artifacts.size() == 1
-        metadata.getConfiguration("child1").artifacts.size() == 3
-        metadata.getConfiguration("child2").artifacts.size() == 1
-    }
-
-    BuildableLocalConfigurationMetadata addConfiguration(String name, Collection<String> extendsFrom = [], AttributeContainerInternal attributes = ImmutableAttributes.EMPTY) {
-        return metadata.addConfiguration(name, "", extendsFrom as Set, ImmutableSet.copyOf(extendsFrom + [name]), true, true, attributes as ImmutableAttributes, true, null, true, ImmutableCapabilities.EMPTY)
-    }
-
-    void addArtifact(BuildableLocalConfigurationMetadata configuration, IvyArtifactName name, File file, TaskDependency buildDeps = null) {
-        PublishArtifact publishArtifact = new DefaultPublishArtifact(name.name, name.extension, name.type, name.classifier, new Date(), file)
-        if (buildDeps != null) {
-            publishArtifact.builtBy(buildDeps)
-        }
-        addArtifact(configuration, publishArtifact)
-    }
-
-    void addArtifact(BuildableLocalConfigurationMetadata configuration, PublishArtifact publishArtifact) {
-        configuration.addArtifacts(
-            new DefaultPublishArtifactSet("arts", WrapUtil.toDomainObjectSet(PublishArtifact, publishArtifact), TestFiles.fileCollectionFactory(), TestFiles.taskDependencyFactory())
-        )
+        conf1Md.artifacts.size() == 1
+        conf2Md.artifacts.size() == 3
+        child2Md.artifacts.size() == 1
     }
 
     def "can add artifact to several configurations"() {
@@ -162,19 +174,22 @@ class DefaultLocalComponentMetadataTest extends Specification {
         def file = new File("artifact.zip")
 
         given:
-        def conf1 = addConfiguration("conf1")
-        def conf2 = addConfiguration("conf2")
+        def publishArtifact = createArtifact(artifact, file)
+        def conf1Conf = register("conf1")
+        def conf2Conf = register("conf2")
+
+        conf1Conf.artifacts.add(publishArtifact)
+        conf2Conf.artifacts.add(publishArtifact)
 
         when:
-        def publishArtifact = new DefaultPublishArtifact(artifact.name, artifact.extension, artifact.type, artifact.classifier, new Date(), file)
-        conf1.addArtifacts([publishArtifact])
-        conf2.addArtifacts([publishArtifact])
+        def conf1 = component.getConfiguration("conf1")
+        def conf2 = component.getConfiguration("conf2")
         conf1.prepareToResolveArtifacts()
         conf2.prepareToResolveArtifacts()
 
         then:
-        metadata.getConfiguration("conf1").artifacts.size() == 1
-        metadata.getConfiguration("conf1").artifacts == metadata.getConfiguration("conf2").artifacts
+        conf1.artifacts.size() == 1
+        conf2.artifacts == component.getConfiguration("conf2").artifacts
     }
 
     def "can lookup an artifact given an Ivy artifact"() {
@@ -182,15 +197,16 @@ class DefaultLocalComponentMetadataTest extends Specification {
         def file = new File("artifact.zip")
 
         given:
-        def conf = addConfiguration("conf")
+        def conf = register("conf")
+        conf.artifacts.add(createArtifact(artifact, file))
 
-        and:
-        addArtifact(conf, artifact, file)
-        conf.prepareToResolveArtifacts()
+        when:
+        def confMd = component.getConfiguration("conf")
+        confMd.prepareToResolveArtifacts()
 
-        expect:
+        then:
         def ivyArtifact = artifactName()
-        def resolveArtifact = metadata.getConfiguration("conf").artifact(ivyArtifact)
+        def resolveArtifact = confMd.artifact(ivyArtifact)
         resolveArtifact.file == file
     }
 
@@ -198,11 +214,14 @@ class DefaultLocalComponentMetadataTest extends Specification {
         def artifact = artifactName()
 
         given:
-        def conf = addConfiguration("conf")
-        conf.prepareToResolveArtifacts()
+        register("conf")
 
-        expect:
-        def resolveArtifact = metadata.getConfiguration("conf").artifact(artifact)
+        when:
+        def confMd = component.getConfiguration("conf")
+        confMd.prepareToResolveArtifacts()
+
+        then:
+        def resolveArtifact = confMd.artifact(artifact)
         resolveArtifact != null
         resolveArtifact.file == null
     }
@@ -213,20 +232,25 @@ class DefaultLocalComponentMetadataTest extends Specification {
         def file1 = new File("artifact-1.zip")
         def file2 = new File("artifact-2.zip")
 
+        given:
+        def conf1 = register("conf1")
+        def conf2 = register("conf2")
+
+        conf1.artifacts.add(createArtifact(artifact1, file1))
+        conf2.artifacts.add(createArtifact(artifact2, file2))
+
         when:
-        def conf1 = addConfiguration("conf1")
-        def conf2 = addConfiguration("conf2")
-        addArtifact(conf1, artifact1, file1)
-        addArtifact(conf2, artifact2, file2)
-        conf1.prepareToResolveArtifacts()
-        conf2.prepareToResolveArtifacts()
+        def conf1Md = component.getConfiguration("conf1")
+        def conf2Md = component.getConfiguration("conf2")
+        conf1Md.prepareToResolveArtifacts()
+        conf2Md.prepareToResolveArtifacts()
 
         then:
-        def conf1Artifacts = metadata.getConfiguration("conf1").artifacts as List
+        def conf1Artifacts = conf1Md.artifacts as List
         conf1Artifacts.size() == 1
         def artifactMetadata1 = conf1Artifacts[0]
 
-        def conf2Artifacts = metadata.getConfiguration("conf2").artifacts as List
+        def conf2Artifacts = conf2Md.artifacts as List
         conf2Artifacts.size() == 1
         def artifactMetadata2 = conf2Artifacts[0]
 
@@ -234,115 +258,204 @@ class DefaultLocalComponentMetadataTest extends Specification {
         artifactMetadata1.id != artifactMetadata2.id
 
         and:
-        metadata.getConfiguration("conf1").artifacts == [artifactMetadata1]
-        metadata.getConfiguration("conf2").artifacts == [artifactMetadata2]
+        component.getConfiguration("conf1").artifacts == [artifactMetadata1]
+        component.getConfiguration("conf2").artifacts == [artifactMetadata2]
     }
 
     def "variants are attached to configuration but not its children"() {
-        def variant1Attrs = attributes()
-        def variant1Artifacts = ([Stub(PublishArtifact)] as Set)
-        def variant2Attrs = attributes()
-        def variant2Artifacts = ([Stub(PublishArtifact)] as Set)
+        def variant1Attrs = Stub(ImmutableAttributes)
+        def variant2Attrs = Stub(ImmutableAttributes)
+
+        given:
+        def conf1 = register("conf1")
+        def conf2 = register("conf2", [conf1])
+        ConfigurationVariant variant1 = conf1.outgoing.getVariants().create("variant1")
+        ConfigurationVariant variant2 = conf2.outgoing.getVariants().create("variant2")
+        variant1.attributes >> variant1Attrs
+        variant2.attributes >> variant2Attrs
+        variant1.artifacts.add(Stub(PublishArtifact))
+        variant2.artifacts.add(Stub(PublishArtifact))
+        variant2.artifacts.add(Stub(PublishArtifact))
 
         when:
-        def conf1 = addConfiguration("conf1")
-        def conf2 = addConfiguration("conf2", ["conf1"])
-        conf1.addVariant("variant1", Stub(VariantResolveMetadata.Identifier), Stub(DisplayName), variant1Attrs, ImmutableCapabilities.EMPTY, variant1Artifacts)
-        conf2.addVariant("variant2", Stub(VariantResolveMetadata.Identifier), Stub(DisplayName), variant2Attrs, ImmutableCapabilities.EMPTY, variant2Artifacts)
+        def config1 = component.getConfiguration("conf1")
+        def config2 = component.getConfiguration("conf2")
 
         then:
-        def config1 = metadata.getConfiguration("conf1")
-        config1.variants.size() == 1
-        config1.variants.first().name == "variant1"
-        config1.variants.first().attributes == variant1Attrs
+        config1.variants*.name as List == ["conf1", "conf1-variant1"]
+        config1.variants.find { it.name == "conf1-variant1" }.attributes == variant1Attrs
 
-        def config2 = metadata.getConfiguration("conf2")
-        config2.variants.size() == 1
-        config2.variants.first().name == "variant2"
-        config2.variants.first().attributes == variant2Attrs
+        config2.variants*.name as List == ["conf2", "conf2-variant2"]
+        config2.variants.find { it.name == "conf2-variant2" }.attributes == variant2Attrs
 
         when:
         config1.prepareToResolveArtifacts()
         config2.prepareToResolveArtifacts()
 
         then:
-        config1.variants.first().artifacts.size() == 1
-        config2.variants.first().artifacts.size() == 1
-    }
-
-    private ImmutableAttributes attributes() {
-        return Stub(ImmutableAttributes)
+        config1.variants.find { it.name == "conf1-variant1" }.artifacts.size() == 1
+        config2.variants.find { it.name == "conf2-variant2" }.artifacts.size() == 2
     }
 
     def "files attached to configuration and its children"() {
-        def files1 = Stub(LocalFileDependencyMetadata)
-        def files2 = Stub(LocalFileDependencyMetadata)
-        def files3 = Stub(LocalFileDependencyMetadata)
+        def files1 = Stub(FileCollectionDependency)
+        def files2 = Stub(FileCollectionDependency)
+        def files3 = Stub(FileCollectionDependency)
 
         given:
-        def conf1 = addConfiguration("conf1")
-        def conf2 = addConfiguration("conf2")
-        def child1 = addConfiguration("child1", ["conf1", "conf2"])
-        addConfiguration("child2", ["conf1"])
+        def conf1 = register("conf1")
+        def conf2 = register("conf2")
+        def child1 = register("child1", [conf1, conf2])
+        register("child2", [conf1])
 
         when:
-        conf1.addFiles(files1)
-        conf2.addFiles(files2)
-        child1.addFiles(files3)
+        conf1.getDependencies().add(files1)
+        conf2.getDependencies().add(files2)
+        child1.getDependencies().add(files3)
 
         then:
-        metadata.getConfiguration("conf1").files == [files1] as Set
-        metadata.getConfiguration("conf2").files == [files2] as Set
-        metadata.getConfiguration("child1").files == [files1, files2, files3] as Set
-        metadata.getConfiguration("child2").files == [files1] as Set
+        component.getConfiguration("conf1").files*.source == [files1]
+        component.getConfiguration("conf2").files*.source == [files2]
+        component.getConfiguration("child1").files*.source == [files1, files2, files3]
+        component.getConfiguration("child2").files*.source == [files1]
     }
 
     def "dependency is attached to configuration and its children"() {
-        def dependency1 = Mock(LocalOriginDependencyMetadata)
-        dependency1.moduleConfiguration >> "conf1"
-        def dependency2 = Mock(LocalOriginDependencyMetadata)
-        dependency2.moduleConfiguration >> "conf2"
-        def dependency3 = Mock(LocalOriginDependencyMetadata)
-        dependency3.moduleConfiguration >> "child1"
+        def dependency1 = Mock(ExternalModuleDependency)
+        def dependency2 = Mock(ExternalModuleDependency)
+        def dependency3 = Mock(ExternalModuleDependency)
 
         when:
-        def conf1 = addConfiguration("conf1")
-        def conf2 = addConfiguration("conf2")
-        def child1 = addConfiguration("child1", ["conf1", "conf2"])
-        addConfiguration("child2", ["conf1"])
-        addConfiguration("other")
+        def conf1 = register("conf1")
+        def conf2 = register("conf2")
+        def child1 = register("child1", [conf1, conf2])
+        register("child2", [conf1])
+        register("other")
 
-        conf1.addDependency(dependency1)
-        conf2.addDependency(dependency2)
-        child1.addDependency(dependency3)
+        conf1.getDependencies().add(dependency1)
+        conf2.getDependencies().add(dependency2)
+        child1.getDependencies().add(dependency3)
 
         then:
-        metadata.getConfiguration("conf1").dependencies == [dependency1]
-        metadata.getConfiguration("conf2").dependencies == [dependency2]
-        metadata.getConfiguration("child1").dependencies == [dependency1, dependency2, dependency3]
-        metadata.getConfiguration("child2").dependencies == [dependency1]
-        metadata.getConfiguration("other").dependencies.isEmpty()
+        component.getConfiguration("conf1").dependencies*.source == [dependency1]
+        component.getConfiguration("conf2").dependencies*.source == [dependency2]
+        component.getConfiguration("child1").dependencies*.source == [dependency1, dependency2, dependency3]
+        component.getConfiguration("child2").dependencies*.source == [dependency1]
+        component.getConfiguration("other").dependencies.isEmpty()
     }
 
     def "builds and caches exclude rules for a configuration"() {
         given:
-        def compile = metadata.addConfiguration("compile", null, [] as Set<String>, ImmutableSet.of("compile"), true, true, null, true, null, true, ImmutableCapabilities.EMPTY)
-        def runtime = metadata.addConfiguration("runtime", null, ["compile"] as Set, ImmutableSet.of("compile", "runtime"), true, true, null, true, null, true, ImmutableCapabilities.EMPTY)
+        def compile = register("compile")
+        def runtime = register("runtime", [compile])
 
-        def rule1 = new DefaultExclude(DefaultModuleIdentifier.newId("group1", "module1"))
-        def rule2 = new DefaultExclude(DefaultModuleIdentifier.newId("group1", "module1"))
-
-        compile.addExclude(rule1)
-        runtime.addExclude(rule2)
+        compile.getExcludeRules().add(new DefaultExcludeRule("group1", "module1"))
+        runtime.getExcludeRules().add(new DefaultExcludeRule("group2", "module2"))
 
         expect:
-        def config = metadata.getConfiguration("runtime")
-        def excludes = config.excludes
-        excludes == [rule1, rule2]
-        config.excludes.is(excludes)
+        def compileMd = component.getConfiguration("compile")
+        compileMd.excludes*.moduleId.group == ["group1"]
+        compileMd.excludes*.moduleId.name == ["module1"]
+
+        def runtimeMd = component.getConfiguration("runtime")
+        runtimeMd.excludes*.moduleId.group == ["group1", "group2"]
+        runtimeMd.excludes*.moduleId.name == ["module1", "module2"]
+        runtimeMd.excludes.is(runtimeMd.excludes)
     }
 
     def artifactName() {
         return new DefaultIvyArtifactName("artifact", "type", "ext")
+    }
+
+    ConfigurationInternal register(String name, List<ConfigurationInternal> extendsFrom = []) {
+        def conf = configuration(name, extendsFrom)
+        component.registerConfiguration(conf)
+        return conf
+    }
+
+    /**
+     * Creates a minimal mocked {@link ConfigurationInternal} instance.
+     *
+     * TODO: We really should not need such a complex Configuration mock here. However, since some of
+     * the tests here are testing functionality of {@link DefaultLocalConfigurationMetadataBuilder}, this
+     * complex Configuration mock is required.
+     *
+     * TODO: And TBH if we're doing this much mocking, we really should be using real Configurations.
+     */
+    ConfigurationInternal configuration(String name, List<ConfigurationInternal> extendsFrom) {
+
+        DependencySet dependencies = new DefaultDependencySet(Describables.of("dependencies"), Mock(ConfigurationInternal) {
+            isCanBeDeclaredAgainst() >> true
+        }, TestUtil.domainObjectCollectionFactory().newDomainObjectSet(Dependency))
+
+        DependencyConstraintSet dependencyConstraints = Mock() {
+            iterator() >> Collections.emptyIterator()
+        }
+
+        NamedDomainObjectContainer<ConfigurationVariant> variants = TestUtil.domainObjectCollectionFactory()
+            .newNamedDomainObjectContainer(ConfigurationVariant.class, variantName -> Mock(ConfigurationVariant) {
+                getName() >> variantName
+                getArtifacts() >> artifactSet()
+            })
+
+        PublishArtifactSet artifacts = artifactSet()
+        ConfigurationPublications outgoing = Mock(ConfigurationPublications) {
+            getCapabilities() >> Collections.emptySet()
+            getArtifacts() >> artifacts
+            getVariants() >> variants
+        }
+
+        def conf = Mock(ConfigurationInternal) {
+            getName() >> name
+            getAttributes() >> ImmutableAttributes.EMPTY
+            getDependencies() >> dependencies
+            getDependencyConstraints() >> dependencyConstraints
+            getExcludeRules() >> new LinkedHashSet<ExcludeRule>()
+            collectVariants(_ as ConfigurationInternal.VariantVisitor) >> { ConfigurationInternal.VariantVisitor visitor ->
+                visitor.visitArtifacts(artifacts)
+                visitor.visitOwnVariant(Describables.of(name), ImmutableAttributes.EMPTY, Collections.emptySet(), artifacts)
+                variants.each {
+                    visitor.visitChildVariant(it.name, Describables.of(it.name), it.attributes as ImmutableAttributes, Collections.emptySet(), it.artifacts)
+                }
+            }
+            getOutgoing() >> outgoing
+            getExtendsFrom() >> extendsFrom
+            getArtifacts() >> artifacts
+        }
+        conf.getHierarchy() >> [conf] + extendsFrom
+        return conf
+    }
+
+    PublishArtifact createArtifact(IvyArtifactName name, File file, TaskDependency buildDeps = null) {
+        PublishArtifact publishArtifact = new DefaultPublishArtifact(name.name, name.extension, name.type, name.classifier, new Date(), file)
+        if (buildDeps != null) {
+            publishArtifact.builtBy(buildDeps)
+        }
+        publishArtifact
+    }
+
+    PublishArtifactSet artifactSet() {
+        new DefaultPublishArtifactSet(
+            Describables.of("artifacts"),
+            TestUtil.domainObjectCollectionFactory().newDomainObjectSet(PublishArtifact),
+            TestFiles.fileCollectionFactory(),
+            Mock(TaskDependencyFactory)
+        )
+    }
+
+    LocalOriginDependencyMetadata dependencyMetadata(Dependency dependency) {
+        return new DslOriginDependencyMetadataWrapper(Mock(LocalOriginDependencyMetadata), dependency)
+    }
+
+    class TestDependencyMetadataFactory implements DependencyDescriptorFactory {
+        @Override
+        LocalOriginDependencyMetadata createDependencyDescriptor(ComponentIdentifier componentId, String clientConfiguration, AttributeContainer attributes, ModuleDependency dependency) {
+            return dependencyMetadata(dependency)
+        }
+
+        @Override
+        LocalOriginDependencyMetadata createDependencyConstraintDescriptor(ComponentIdentifier componentId, String clientConfiguration, AttributeContainer attributes, DependencyConstraint dependencyConstraint) {
+            throw new UnsupportedOperationException()
+        }
     }
 }

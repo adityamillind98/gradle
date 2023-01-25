@@ -16,7 +16,6 @@
 
 package org.gradle.configurationcache.metadata
 
-import com.google.common.collect.ImmutableSet
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.component.ComponentIdentifier
@@ -41,16 +40,19 @@ import org.gradle.configurationcache.serialization.runWriteOperation
 import org.gradle.configurationcache.serialization.writeCollection
 import org.gradle.internal.Describables
 import org.gradle.internal.component.external.model.ImmutableCapabilities
-import org.gradle.internal.component.local.model.BuildableLocalConfigurationMetadata
 import org.gradle.internal.component.local.model.DefaultLocalComponentGraphResolveState
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata
+import org.gradle.internal.component.local.model.DefaultLocalConfigurationMetadata
 import org.gradle.internal.component.local.model.LocalComponentGraphResolveState
 import org.gradle.internal.component.local.model.LocalComponentMetadata
 import org.gradle.internal.component.local.model.LocalConfigurationGraphResolveMetadata
+import org.gradle.internal.component.local.model.LocalConfigurationMetadata
+import org.gradle.internal.component.local.model.LocalVariantMetadata
 import org.gradle.internal.component.local.model.PublishArtifactLocalArtifactMetadata
+import org.gradle.internal.component.model.DependencyMetadata
 import org.gradle.internal.component.model.LocalComponentDependencyMetadata
-import org.gradle.internal.component.model.LocalOriginDependencyMetadata
 import org.gradle.internal.component.model.VariantResolveMetadata
+import org.gradle.internal.model.CalculatedValueContainerFactory
 import org.gradle.internal.serialize.Decoder
 import org.gradle.internal.serialize.Encoder
 import org.gradle.util.Path
@@ -91,15 +93,14 @@ class ProjectMetadataController(
 
     private
     suspend fun WriteContext.writeConfiguration(configuration: LocalConfigurationGraphResolveMetadata) {
-        val artifactMetadata = configuration.prepareToResolveArtifacts()
         writeString(configuration.name)
         write(configuration.attributes)
-        writeDependencies(artifactMetadata.dependencies)
-        writeVariants(artifactMetadata.variants)
+        writeDependencies(configuration.dependencies)
+        writeVariants(configuration.prepareToResolveArtifacts().variants)
     }
 
     private
-    suspend fun WriteContext.writeDependencies(dependencies: List<LocalOriginDependencyMetadata>) {
+    suspend fun WriteContext.writeDependencies(dependencies: List<DependencyMetadata>) {
         writeCollection(dependencies) {
             write(it.selector)
             writeBoolean(it.isConstraint)
@@ -127,70 +128,73 @@ class ProjectMetadataController(
         return context.runReadOperation {
             val id = readNonNull<ComponentIdentifier>()
             val moduleVersionId = readNonNull<ModuleVersionIdentifier>()
-            val metadata = DefaultLocalComponentMetadata(moduleVersionId, id, Project.DEFAULT_STATUS, EmptySchema.INSTANCE, RootScriptDomainObjectContext.INSTANCE, ownerService())
-            readConfigurationsInto(metadata)
+            val factory: CalculatedValueContainerFactory = ownerService()
+            val metadata = DefaultLocalComponentMetadata(moduleVersionId, id, Project.DEFAULT_STATUS, EmptySchema.INSTANCE, RootScriptDomainObjectContext.INSTANCE, factory, ownerService())
+            readConfigurationsInto(metadata, factory)
             DefaultLocalComponentGraphResolveState(metadata)
         }
     }
 
     private
-    suspend fun ReadContext.readConfigurationsInto(metadata: DefaultLocalComponentMetadata) {
+    suspend fun ReadContext.readConfigurationsInto(metadata: DefaultLocalComponentMetadata, factory: CalculatedValueContainerFactory) {
         readCollection {
-            readConfigurationInto(metadata)
+            metadata.addConfiguration(readConfiguration(metadata, factory))
         }
     }
 
     private
-    suspend fun ReadContext.readConfigurationInto(metadata: DefaultLocalComponentMetadata) {
+    suspend fun ReadContext.readConfiguration(metadata: DefaultLocalComponentMetadata, factory: CalculatedValueContainerFactory): LocalConfigurationMetadata {
         val configurationName = readString()
         val configurationAttributes = readNonNull<ImmutableAttributes>()
-        val configuration = metadata.addConfiguration(configurationName, null, emptySet(), ImmutableSet.of(configurationName), true, true, configurationAttributes, true, null, true, ImmutableCapabilities.EMPTY)
-        readDependenciesInto(metadata, configuration)
-        readVariantsInto(configuration)
+        val dependencies = readDependencies(metadata.id)
+        val variants = readVariants(factory).toSet()
+
+        return DefaultLocalConfigurationMetadata(
+            configurationName, configurationName, metadata.id, true, true, setOf(configurationName), configurationAttributes,
+            ImmutableCapabilities.EMPTY, true, null, true, dependencies, emptyList(), emptyList(), dependencies, emptySet(), emptyList(),
+            variants, emptyList(), RootScriptDomainObjectContext.INSTANCE, factory, metadata
+        )
     }
 
     private
-    suspend fun ReadContext.readDependenciesInto(metadata: DefaultLocalComponentMetadata, configuration: BuildableLocalConfigurationMetadata) {
-        readCollection {
+    suspend fun ReadContext.readDependencies(componentId: ComponentIdentifier): List<LocalComponentDependencyMetadata> {
+        return readList {
             val selector = readNonNull<ComponentSelector>()
             val constraint = readBoolean()
-            configuration.addDependency(
-                LocalComponentDependencyMetadata(
-                    metadata.id,
-                    selector,
-                    null,
-                    null,
-                    ImmutableAttributes.EMPTY,
-                    null,
-                    emptyList(),
-                    emptyList(),
-                    false,
-                    false,
-                    true,
-                    constraint,
-                    false,
-                    null
-                )
+            LocalComponentDependencyMetadata(
+                componentId,
+                selector,
+                null,
+                null,
+                ImmutableAttributes.EMPTY,
+                null,
+                emptyList(),
+                emptyList(),
+                false,
+                false,
+                true,
+                constraint,
+                false,
+                null
             )
         }
     }
 
     private
-    suspend fun ReadContext.readVariantsInto(configuration: BuildableLocalConfigurationMetadata) {
-        readCollection {
-            readVariantInto(configuration)
+    suspend fun ReadContext.readVariants(factory: CalculatedValueContainerFactory): List<LocalVariantMetadata> {
+        return readList {
+            readVariant(factory)
         }
     }
 
     private
-    suspend fun ReadContext.readVariantInto(configuration: BuildableLocalConfigurationMetadata) {
+    suspend fun ReadContext.readVariant(factory: CalculatedValueContainerFactory): LocalVariantMetadata {
         val variantName = readString()
         val identifier = readNonNull<VariantResolveMetadata.Identifier>()
         val attributes = readNonNull<ImmutableAttributes>()
-        // TODO - don't unpack the artifacts
         val artifacts = readList {
-            readNonNull<PublishArtifactLocalArtifactMetadata>().publishArtifact
+            readNonNull<PublishArtifactLocalArtifactMetadata>()
         }
-        configuration.addVariant(variantName, identifier, Describables.of(variantName), attributes, ImmutableCapabilities.EMPTY, artifacts)
+        return LocalVariantMetadata(variantName, identifier, Describables.of(variantName), attributes, artifacts, ImmutableCapabilities.EMPTY, factory)
     }
 }

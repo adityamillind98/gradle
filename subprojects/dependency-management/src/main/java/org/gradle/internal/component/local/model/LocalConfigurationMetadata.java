@@ -17,17 +17,19 @@
 package org.gradle.internal.component.local.model;
 
 import com.google.common.collect.ImmutableList;
+import org.gradle.api.Transformer;
 import org.gradle.internal.component.model.ConfigurationMetadata;
+import org.gradle.internal.component.model.ExcludeMetadata;
 import org.gradle.internal.component.model.LocalOriginDependencyMetadata;
 
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Set;
 
-public interface LocalConfigurationMetadata extends ConfigurationMetadata {
+public interface LocalConfigurationMetadata extends ConfigurationMetadata, LocalConfigurationGraphResolveMetadata {
 
+    @Nullable
     String getDescription();
-
-    Set<String> getExtendsFrom();
 
     @Override
     List<? extends LocalOriginDependencyMetadata> getDependencies();
@@ -39,4 +41,12 @@ public interface LocalConfigurationMetadata extends ConfigurationMetadata {
      * Returns the files attached to this configuration, if any. These should be represented as dependencies, but are currently represented as files as a migration step.
      */
     Set<LocalFileDependencyMetadata> getFiles();
+
+    LocalConfigurationMetadata copy(Transformer<LocalComponentArtifactMetadata, LocalComponentArtifactMetadata> artifactTransformer);
+
+    List<LocalOriginDependencyMetadata> getDefinedDependencies();
+
+    List<ExcludeMetadata> getDefinedExcludes();
+
+    List<LocalFileDependencyMetadata> getDefinedFiles();
 }

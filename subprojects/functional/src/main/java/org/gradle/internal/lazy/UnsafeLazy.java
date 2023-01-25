@@ -35,4 +35,9 @@ class UnsafeLazy<T> implements Lazy<T> {
         }
         return value;
     }
+
+    @Override
+    public boolean isRealized() {
+        return supplier == null;
+    }
 }
