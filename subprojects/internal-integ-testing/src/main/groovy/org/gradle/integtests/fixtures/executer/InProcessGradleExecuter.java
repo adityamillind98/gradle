@@ -48,6 +48,7 @@ import org.gradle.internal.InternalListener;
 import org.gradle.internal.IoActions;
 import org.gradle.internal.SystemProperties;
 import org.gradle.internal.UncheckedException;
+import org.gradle.internal.agents.AgentUtils;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.event.ListenerManager;
@@ -228,6 +229,12 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
             builder.setExecutable(new File(getJavaHome(), "bin/java"));
             builder.classpath(getExecHandleFactoryClasspath());
             builder.jvmArgs(invocation.launcherJvmArgs);
+            if (isAgentInstrumentationEnabled()) {
+                // Apply the agent to the newly created daemon.
+                for (File agent : cleanup(GLOBAL_SERVICES.get(ModuleRegistry.class).getModule(AgentUtils.AGENT_MODULE_NAME).getClasspath().getAsFiles())) {
+                    builder.jvmArgs("-javaagent:" + agent.getAbsolutePath());
+                }
+            }
             builder.environment(invocation.environmentVars);
 
             builder.getMainClass().set(Main.class.getName());
