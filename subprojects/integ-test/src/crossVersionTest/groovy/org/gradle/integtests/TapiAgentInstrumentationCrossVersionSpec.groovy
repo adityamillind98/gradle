@@ -30,7 +30,7 @@ class TapiAgentInstrumentationCrossVersionSpec extends ToolingApiSpecification {
         runDumpTaskWithTapi()
 
         then:
-        agentWasNotApplied()
+        agentWasApplied()
     }
 
     def "agent is applied if enabled in settings"() {
