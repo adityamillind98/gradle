@@ -183,12 +183,11 @@ fun IntegrationTest.setUpAgentIfNeeded(testType: TestType, executer: String) {
     if (project.hasProperty(integTestUseAgentSysPropName)) {
         val shouldUseAgent = (project.property(integTestUseAgentSysPropName) as? String).toBoolean()
         systemProperties[integTestUseAgentSysPropName] = shouldUseAgent.toString()
-
-        if (shouldUseAgent && executer == "embedded") {
-            jvmArgumentProviders.add(project.objects.newInstance<AgentsClasspathProvider>().apply {
-                agentsClasspath.from(project.configurations["${testType.prefix}TestAgentsClasspath"])
-            })
-        }
+    }
+    if (executer == "embedded") {
+        jvmArgumentProviders.add(project.objects.newInstance<AgentsClasspathProvider>().apply {
+            agentsClasspath.from(project.configurations["${testType.prefix}TestAgentsClasspath"])
+        })
     }
 }
 
