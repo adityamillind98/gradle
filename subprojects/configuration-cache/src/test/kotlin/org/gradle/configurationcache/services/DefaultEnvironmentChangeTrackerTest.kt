@@ -21,7 +21,7 @@ import org.gradle.configurationcache.problems.DefaultProblemFactory
 import org.junit.Test
 
 
-class EnvironmentChangeTrackerTest {
+class DefaultEnvironmentChangeTrackerTest {
     private
     val tracker = DefaultEnvironmentChangeTracker(DefaultProblemFactory(DefaultUserCodeApplicationContext(), { _, _ -> null }))
 

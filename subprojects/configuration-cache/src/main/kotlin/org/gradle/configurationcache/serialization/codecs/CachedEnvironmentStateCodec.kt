@@ -36,6 +36,7 @@ object CachedEnvironmentStateCodec : Codec<DefaultEnvironmentChangeTracker.Cache
             val keyString = update.key.toString()
             withPropertyTrace(PropertyTrace.SystemProperty(keyString, update.location)) {
                 try {
+                    writeClass(update.javaClass)
                     write(update.key)
                     write(update.value)
                 } catch (error: Exception) {
@@ -55,9 +56,18 @@ object CachedEnvironmentStateCodec : Codec<DefaultEnvironmentChangeTracker.Cache
     override suspend fun ReadContext.decode(): DefaultEnvironmentChangeTracker.CachedEnvironmentState {
         val cleared = readBoolean()
         val updates = readList {
+            val clazz = readClass()
             val key = read() as Any
             val value = read()
-            DefaultEnvironmentChangeTracker.SystemPropertySet(key, value, PropertyTrace.Unknown)
+            when(clazz) {
+                DefaultEnvironmentChangeTracker.SystemPropertyMutate::class.java ->
+                    DefaultEnvironmentChangeTracker.SystemPropertyMutate(key, value, PropertyTrace.Unknown)
+                DefaultEnvironmentChangeTracker.SystemPropertyRootLoad::class.java ->
+                    DefaultEnvironmentChangeTracker.SystemPropertyRootLoad(key, value, null)// TODO !!
+                DefaultEnvironmentChangeTracker.SystemPropertyLoad::class.java ->
+                    DefaultEnvironmentChangeTracker.SystemPropertyLoad(key, value, null)
+                else -> throw IllegalStateException("Overridden properties shouldn't be stored") // TODO!!!!!
+            }
         }
 
         val removals = readList {

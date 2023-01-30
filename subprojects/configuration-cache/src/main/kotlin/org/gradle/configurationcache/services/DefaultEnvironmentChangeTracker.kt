@@ -38,9 +38,23 @@ class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory
     private
     val mode = ModeHolder()
 
-    override fun systemPropertyChanged(key: Any, value: Any?, consumer: String?) = mode.toTrackingMode().systemPropertyChanged(key, value, consumer)
+    override fun systemPropertyChanged(key: Any, value: Any?, consumer: String?) =
+        mode.toTrackingMode().systemPropertyChanged(key, value, consumer)
+
+    override fun systemPropertyLoadedByRootBuild(key: Any, value: Any?, oldValue: Any?) =
+        mode.toTrackingMode().systemPropertyLoadedByRootBuild(key, value, oldValue)
+
+    override fun systemPropertyLoaded(key: Any, value: Any?, oldValue: Any?) =
+        mode.toTrackingMode().systemPropertyLoaded(key, value, oldValue)
+
+    override fun systemPropertyOverridden(key: Any, value: Any?) =
+        mode.toTrackingMode().systemPropertyOverridden(key, value)
 
     fun isSystemPropertyMutated(key: String) = mode.toTrackingMode().isSystemPropertyMutated(key)
+
+    fun isSystemPropertyLoaded(key: String) = mode.toTrackingMode().isSystemPropertyLoaded(key)
+
+    fun getLoadedPropertyOldValue(key: String) = mode.toTrackingMode().getLoadedPropertyOldValue(key)
 
     fun loadFrom(storedState: CachedEnvironmentState) = mode.toRestoringMode().loadFrom(storedState)
 
@@ -105,19 +119,48 @@ class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory
         }
 
         fun isSystemPropertyMutated(key: String): Boolean {
-            return systemPropertiesCleared || mutatedSystemProperties.containsKey(key)
+            return systemPropertiesCleared || mutatedSystemProperties[key] is SystemPropertyMutate
+        }
+
+        fun isSystemPropertyLoaded(key: String): Boolean {
+            return mutatedSystemProperties[key] is SystemPropertyLoad
+        }
+
+        fun getLoadedPropertyOldValue(key: String): Any? {
+            return (mutatedSystemProperties[key] as? SystemPropertyLoad)?.oldValue
         }
 
         fun getCachedState(): CachedEnvironmentState {
             return CachedEnvironmentState(
                 cleared = systemPropertiesCleared,
-                updates = mutatedSystemProperties.values.filterIsInstance<SystemPropertySet>(),
+                updates = mutatedSystemProperties.values
+                    .filterIsInstance<SystemPropertySet>()
+                    .filter { it !is SystemPropertyOverride },
                 removals = mutatedSystemProperties.values.filterIsInstance<SystemPropertyRemove>()
             )
         }
 
+        fun systemPropertyOverridden(key: Any, value: Any?) {
+            mutatedSystemProperties[key] = SystemPropertyOverride(key, value)
+        }
+
+        fun systemPropertyLoadedByRootBuild(key: Any, value: Any?, oldValue: Any?) {
+            mutatedSystemProperties[key] = SystemPropertyRootLoad(key, value, oldValue)
+        }
+
+        fun systemPropertyLoaded(key: Any, value: Any?, oldValue: Any?) {
+
+            val loadedOldValue = when (val loadedSystemProperty = mutatedSystemProperties[key]) {
+                is SystemPropertyRootLoad -> loadedSystemProperty.value
+                is SystemPropertyLoad -> loadedSystemProperty.oldValue
+                else -> oldValue
+            }
+
+            mutatedSystemProperties[key] = SystemPropertyLoad(key, value, loadedOldValue)
+        }
+
         fun systemPropertyChanged(key: Any, value: Any?, consumer: String?) {
-            mutatedSystemProperties[key] = SystemPropertySet(key, value, problemFactory.locationForCaller(consumer))
+            mutatedSystemProperties[key] = SystemPropertyMutate(key, value, problemFactory.locationForCaller(consumer))
         }
 
         fun systemPropertyRemoved(key: Any) {
@@ -169,7 +212,16 @@ class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory
 
     sealed class SystemPropertyChange
 
-    class SystemPropertySet(val key: Any, val value: Any?, val location: PropertyTrace) : SystemPropertyChange()
+    sealed class SystemPropertySet(val key: Any, val value: Any?, val location: PropertyTrace) : SystemPropertyChange()
+
+    class SystemPropertyMutate(key: Any, value: Any?, location: PropertyTrace) : SystemPropertySet(key, value, location)
+
+    class SystemPropertyOverride(key: Any, value: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
+
+    class SystemPropertyRootLoad(key: Any, value: Any?, val oldValue: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
+
+    class SystemPropertyLoad(key: Any, value: Any?, val oldValue: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
+
     class SystemPropertyRemove(val key: String) : SystemPropertyChange()
 
     /**

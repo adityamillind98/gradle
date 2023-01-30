@@ -18,6 +18,8 @@ package org.gradle.configurationcache
 
 
 import org.gradle.configurationcache.fixtures.BuildLogicChangeFixture
+import org.gradle.configurationcache.fixtures.SystemPropertiesFixture
+import org.gradle.test.fixtures.file.TestFile
 import spock.lang.Issue
 
 import static org.gradle.initialization.IGradlePropertiesLoader.ENV_PROJECT_PROPERTIES_PREFIX
@@ -167,7 +169,7 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
 
             println(providers.systemProperty('fromPropertiesFile').orNull + "!")
         """
-        file('build-logic/gradle.properties') << 'systemProp.$systemProp=42'
+        file('build-logic/gradle.properties') << "systemProp.$systemProp=42"
 
         when:
         System.clearProperty("$systemProp")
@@ -191,40 +193,108 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
         System.clearProperty("$systemProp")
     }
 
-    def "same system property from multiple included build properties files"() {
+    def "passing cli override invalidates cache entry only if this property was read at configuration time"() {
         given:
         String systemProp = "fromPropertiesFile"
         def configurationCache = newConfigurationCacheFixture()
+        spec.setup(this, systemProp)
 
-        settingsFile << """
-            includeBuild("included-build-1")
-            includeBuild("included-build-2")
-        """
-        buildFile << "task ok"
-
-        file("included-build-1/build.gradle") << "println(providers.systemProperty('$systemProp').orNull + '!')"
-        file("included-build-1/gradle.properties") << "systemProp.$systemProp = 42"
-
-        file("included-build-2/build.gradle") << "println(providers.systemProperty('$systemProp').orNull + '!')"
-        file("included-build-2/gradle.properties") << "systemProp.$systemProp = 12"
+        buildFile << systemPropertyEchoTask(systemProp)
+        if (isPropertyReadAtConfiguration) {
+            buildFile << "println('Configuration: ' + providers.systemProperty('$systemProp').orNull)\n"
+        }
 
         when:
-        System.clearProperty("$systemProp")
-        configurationCacheRun "ok"
+        System.clearProperty(systemProp)
+        configurationCacheRun "echo"
 
         then:
         configurationCache.assertStateStored()
-        outputContains "12!"
+        if (isPropertyReadAtConfiguration) {
+            outputContains "Configuration: ${spec.expectedPropertyValue()}"
+        }
+        outputContains "Execution: ${spec.expectedPropertyValue()}"
 
         when:
-        System.clearProperty("$systemProp")
-        configurationCacheRun "ok"
+        System.clearProperty(systemProp)
+        configurationCacheRun "echo"
 
         then:
-        outputDoesNotContain "because system property '$systemProp' has changed"
+        configurationCache.assertStateLoaded()
+
+        when:
+        System.clearProperty(systemProp)
+        configurationCacheRun "echo", "-D$systemProp=overridden property"
+
+        then:
+        if (isPropertyReadAtConfiguration) {
+            outputContains("Calculating task graph as configuration cache cannot be reused because system property '$systemProp' has changed")
+            outputContains "Configuration: overridden property"
+            outputContains "Execution: overridden property"
+        } else {
+            configurationCache.assertStateLoaded()
+        }
+
+        when:
+        System.clearProperty(systemProp)
+        configurationCacheRun "echo", "-D$systemProp=overridden property"
+
+        then:
         configurationCache.assertStateLoaded()
 
         cleanup:
         System.clearProperty("$systemProp")
+
+        where:
+        [spec, isPropertyReadAtConfiguration] << [
+            SystemPropertiesFixture.specs(),
+            [true, false]
+        ].combinations()
+    }
+
+    def "ffff"() {
+        given:
+        String systemProp = "fromPropertiesFile"
+        def configurationCache = newConfigurationCacheFixture()
+
+        spec.setup(this, systemProp)
+
+        buildFile << "task ok"
+
+        when:
+        System.clearProperty(systemProp)
+        configurationCacheRun "ok"
+
+        then:
+        configurationCache.assertStateStored()
+
+        when:
+        System.setProperty(systemProp, "changed property")
+        configurationCacheRun "ok"
+
+        then:
+        configurationCache.assertStateLoadFailed()
+
+        cleanup:
+        System.clearProperty("$systemProp")
+
+        where:
+        spec << [new SystemPropertiesFixture.RootBuildDefinition()]
+    }
+
+
+    private void defineSystemProperty(TestFile dir, String key, String value) {
+        dir.file("gradle.properties") << "systemProp.$key=$value"
+    }
+
+    private String systemPropertyEchoTask(String property) {
+        return """
+            task echo(type: DefaultTask) {
+                def property = providers.systemProperty('$property')
+                doFirst {
+                    println('Execution: ' + property.orNull)
+                }
+            }
+        """
     }
 }

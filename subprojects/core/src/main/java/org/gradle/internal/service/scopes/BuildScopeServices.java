@@ -27,6 +27,7 @@ import org.gradle.api.internal.DependencyClassPathProvider;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.ExternalProcessStartedListener;
 import org.gradle.api.internal.FeaturePreviews;
+import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.DefaultModule;
 import org.gradle.api.internal.artifacts.Module;
@@ -357,13 +358,14 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected IGradlePropertiesLoader createGradlePropertiesLoader(
         Environment environment,
-        EnvironmentChangeTracker environmentChangeTracker
+        EnvironmentChangeTracker environmentChangeTracker,
+        GradleInternal gradleInternal
     ) {
         return new DefaultGradlePropertiesLoader(
             (StartParameterInternal) get(StartParameter.class),
             environment,
-            environmentChangeTracker
-        );
+            environmentChangeTracker,
+            gradleInternal);
     }
 
     protected ValueSourceProviderFactory createValueSourceProviderFactory(

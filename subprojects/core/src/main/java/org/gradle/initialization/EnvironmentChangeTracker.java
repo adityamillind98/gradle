@@ -25,4 +25,10 @@ import javax.annotation.Nullable;
 public interface EnvironmentChangeTracker {
 
     void systemPropertyChanged(Object key, @Nullable Object value, @Nullable String consumer);
+
+    void systemPropertyLoadedByRootBuild(Object key, @Nullable Object value, @Nullable Object oldValue);
+
+    void systemPropertyLoaded(Object key, @Nullable Object value, @Nullable Object oldValue);
+
+    void systemPropertyOverridden(Object key, @Nullable Object value);
 }
