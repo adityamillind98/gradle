@@ -21,6 +21,8 @@ import org.gradle.integtests.tooling.fixture.ToolingApiSpecification
 
 @TargetGradleVersion("current")
 class TapiAgentInstrumentationCrossVersionSpec extends ToolingApiSpecification {
+    private String buildOutput
+
     def "agent is disabled in TAPI by default"() {
         withDumpAgentStatusTask()
 
@@ -57,9 +59,9 @@ class TapiAgentInstrumentationCrossVersionSpec extends ToolingApiSpecification {
 
     private void runDumpTaskWithTapi() {
         withConnection {
-            withBuild {
+            buildOutput = withBuild {
                 it.forTasks("hello")
-            }
+            }.stdout.toString()
         }
     }
 
@@ -72,7 +74,7 @@ class TapiAgentInstrumentationCrossVersionSpec extends ToolingApiSpecification {
     }
 
     private void agentStatusWas(boolean applied) {
-        stdout.toString().contains("agent applied = $applied")
+        assert buildOutput.contains("agent applied = $applied")
     }
 
 

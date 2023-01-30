@@ -30,8 +30,7 @@ import spock.lang.Requires
 // the test runtime classpath as part of the main source set's output.
 // It is important to have the agent appended to the classpath of all integration tests.
 class AgentApplicationTest extends AbstractIntegrationSpec {
-    @Ignore("TODO: agent is enabled by default in tests")
-    def "agent is disabled by default"() {
+    def "agent is enabled by default"() {
         given:
         withDumpAgentStatusTask()
 
@@ -39,7 +38,7 @@ class AgentApplicationTest extends AbstractIntegrationSpec {
         succeeds()
 
         then:
-        agentWasNotApplied()
+        agentWasApplied()
     }
 
     def "agent is not applied if disabled in the command-line"() {
