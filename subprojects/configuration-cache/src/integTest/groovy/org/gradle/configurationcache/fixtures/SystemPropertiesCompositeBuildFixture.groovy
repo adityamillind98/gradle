@@ -309,6 +309,13 @@ class SystemPropertiesCompositeBuildFixture {
                 IncludedBuildDefinition includeBuild = spec.systemPropertyDefinitions.find { it instanceof IncludedBuildDefinition }
                 expectedValue = includeBuild.propertyValue()
                 break
+            case SystemPropertyAccess.INCLUDED_BUILD_SCRIPT:
+                boolean isBuildSrcDefinition = spec.systemPropertyDefinitions.any { it instanceof BuildSrcDefinition }
+                boolean isIncludedBuildDefinition = spec.systemPropertyDefinitions.any { it instanceof IncludedBuildDefinition }
+                expectedValue = isBuildSrcDefinition && isIncludedBuildDefinition
+                    ? spec.systemPropertyDefinitions.findAll { it instanceof IncludedBuildDefinition }.last()
+                    : expectedExecutionTimeValue()
+                break
             default:
                 expectedValue = expectedExecutionTimeValue()
         }
