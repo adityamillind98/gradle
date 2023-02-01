@@ -31,12 +31,14 @@ import org.gradle.internal.component.local.model.LocalFileDependencyMetadata;
 import javax.annotation.Nullable;
 
 public class DefaultLocalConfigurationMetadataBuilder implements LocalConfigurationMetadataBuilder {
-    private final DependencyDescriptorFactory dependencyDescriptorFactory;
+    private final DependencyMetadataFactory dependencyMetadataFactory;
     private final ExcludeRuleConverter excludeRuleConverter;
 
-    public DefaultLocalConfigurationMetadataBuilder(DependencyDescriptorFactory dependencyDescriptorFactory,
-                                                    ExcludeRuleConverter excludeRuleConverter) {
-        this.dependencyDescriptorFactory = dependencyDescriptorFactory;
+    public DefaultLocalConfigurationMetadataBuilder(
+        DependencyMetadataFactory dependencyMetadataFactory,
+        ExcludeRuleConverter excludeRuleConverter
+    ) {
+        this.dependencyMetadataFactory = dependencyMetadataFactory;
         this.excludeRuleConverter = excludeRuleConverter;
     }
 
@@ -55,7 +57,7 @@ public class DefaultLocalConfigurationMetadataBuilder implements LocalConfigurat
         for (Dependency dependency : configuration.getDependencies()) {
             if (dependency instanceof ModuleDependency) {
                 ModuleDependency moduleDependency = (ModuleDependency) dependency;
-                configurationMetadata.addDependency(dependencyDescriptorFactory.createDependencyDescriptor(configurationMetadata.getComponentId(), configuration.getName(), attributes, moduleDependency));
+                configurationMetadata.addDependency(dependencyMetadataFactory.createDependencyMetadata(configurationMetadata.getComponentId(), configuration.getName(), attributes, moduleDependency));
             } else if (dependency instanceof FileCollectionDependency) {
                 final FileCollectionDependency fileDependency = (FileCollectionDependency) dependency;
                 configurationMetadata.addFiles(new DefaultLocalFileDependencyMetadata(fileDependency));
@@ -68,7 +70,7 @@ public class DefaultLocalConfigurationMetadataBuilder implements LocalConfigurat
     private void addDependencyConstraints(BuildableLocalConfigurationMetadata configurationMetadata, ConfigurationInternal configuration) {
         AttributeContainerInternal attributes = configuration.getAttributes();
         for (DependencyConstraint dependencyConstraint : configuration.getDependencyConstraints()) {
-            configurationMetadata.addDependency(dependencyDescriptorFactory.createDependencyConstraintDescriptor(configurationMetadata.getComponentId(), configuration.getName(), attributes, dependencyConstraint));
+            configurationMetadata.addDependency(dependencyMetadataFactory.createDependencyConstraintMetadata(configurationMetadata.getComponentId(), configuration.getName(), attributes, dependencyConstraint));
         }
     }
 
