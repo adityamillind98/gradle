@@ -31,6 +31,22 @@
             "changes": [
                 "Class has been removed"
             ]
+        },
+        {
+            "type": "org.gradle.caching.BuildCacheEntryWriter",
+            "member": "Method org.gradle.caching.BuildCacheEntryWriter.openStream()",
+            "acceptation": "Extended build cache service API",
+            "changes": [
+                "Method added to interface"
+            ]
+        },
+        {
+            "type": "org.gradle.caching.BuildCacheEntryWriter",
+            "member": "Method org.gradle.caching.BuildCacheEntryWriter.writeTo(java.io.OutputStream)",
+            "acceptation": "Extended build cache service API",
+            "changes": [
+                "Abstract method is now default method"
+            ]
         }
     ]
 }
