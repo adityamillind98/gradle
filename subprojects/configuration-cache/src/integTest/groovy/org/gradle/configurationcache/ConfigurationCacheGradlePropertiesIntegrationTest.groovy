@@ -18,8 +18,7 @@ package org.gradle.configurationcache
 
 
 import org.gradle.configurationcache.fixtures.BuildLogicChangeFixture
-import org.gradle.configurationcache.fixtures.SystemPropertiesFixture
-import org.gradle.test.fixtures.file.TestFile
+import org.gradle.configurationcache.fixtures.SystemPropertiesCompositeBuildFixture
 import spock.lang.Issue
 
 import static org.gradle.initialization.IGradlePropertiesLoader.ENV_PROJECT_PROPERTIES_PREFIX
@@ -193,51 +192,33 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
         System.clearProperty("$systemProp")
     }
 
-    def "passing cli override invalidates cache entry only if this property was read at configuration time"() {
+    def "passing cli override invalidates cache entry only if property was read at configuration time"() {
         given:
         String systemProp = "fromPropertiesFile"
         def configurationCache = newConfigurationCacheFixture()
-        spec.setup(this, systemProp)
-
-        buildFile << systemPropertyEchoTask(systemProp)
-        if (isPropertyReadAtConfiguration) {
-            buildFile << "println('Configuration: ' + providers.systemProperty('$systemProp').orNull)\n"
-        }
+        def fixture = spec.createFixtureFor(this, systemProp)
+        fixture.setup()
 
         when:
-        System.clearProperty(systemProp)
-        configurationCacheRun "echo"
+        fixture.cleanPropertyRun()
 
         then:
-        configurationCache.assertStateStored()
-        if (isPropertyReadAtConfiguration) {
-            outputContains "Configuration: ${spec.expectedPropertyValue()}"
-        }
-        outputContains "Execution: ${spec.expectedPropertyValue()}"
+        fixture.assertAfterFirstRun()
 
         when:
-        System.clearProperty(systemProp)
-        configurationCacheRun "echo"
+        fixture.cleanPropertyRun()
 
         then:
         configurationCache.assertStateLoaded()
 
         when:
-        System.clearProperty(systemProp)
-        configurationCacheRun "echo", "-D$systemProp=overridden property"
+        fixture.overriddenPropertyRun()
 
         then:
-        if (isPropertyReadAtConfiguration) {
-            outputContains("Calculating task graph as configuration cache cannot be reused because system property '$systemProp' has changed")
-            outputContains "Configuration: overridden property"
-            outputContains "Execution: overridden property"
-        } else {
-            configurationCache.assertStateLoaded()
-        }
+        fixture.assertAfterOverriddenRun(configurationCache)
 
         when:
-        System.clearProperty(systemProp)
-        configurationCacheRun "echo", "-D$systemProp=overridden property"
+        fixture.overriddenPropertyRun()
 
         then:
         configurationCache.assertStateLoaded()
@@ -246,55 +227,6 @@ class ConfigurationCacheGradlePropertiesIntegrationTest extends AbstractConfigur
         System.clearProperty("$systemProp")
 
         where:
-        [spec, isPropertyReadAtConfiguration] << [
-            SystemPropertiesFixture.specs(),
-            [true, false]
-        ].combinations()
-    }
-
-    def "ffff"() {
-        given:
-        String systemProp = "fromPropertiesFile"
-        def configurationCache = newConfigurationCacheFixture()
-
-        spec.setup(this, systemProp)
-
-        buildFile << "task ok"
-
-        when:
-        System.clearProperty(systemProp)
-        configurationCacheRun "ok"
-
-        then:
-        configurationCache.assertStateStored()
-
-        when:
-        System.setProperty(systemProp, "changed property")
-        configurationCacheRun "ok"
-
-        then:
-        configurationCache.assertStateLoadFailed()
-
-        cleanup:
-        System.clearProperty("$systemProp")
-
-        where:
-        spec << [new SystemPropertiesFixture.RootBuildDefinition()]
-    }
-
-
-    private void defineSystemProperty(TestFile dir, String key, String value) {
-        dir.file("gradle.properties") << "systemProp.$key=$value"
-    }
-
-    private String systemPropertyEchoTask(String property) {
-        return """
-            task echo(type: DefaultTask) {
-                def property = providers.systemProperty('$property')
-                doFirst {
-                    println('Execution: ' + property.orNull)
-                }
-            }
-        """
+        spec << SystemPropertiesCompositeBuildFixture.specs()
     }
 }

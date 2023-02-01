@@ -41,8 +41,8 @@ class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory
     override fun systemPropertyChanged(key: Any, value: Any?, consumer: String?) =
         mode.toTrackingMode().systemPropertyChanged(key, value, consumer)
 
-    override fun systemPropertyLoadedByRootBuild(key: Any, value: Any?, oldValue: Any?) =
-        mode.toTrackingMode().systemPropertyLoadedByRootBuild(key, value, oldValue)
+    override fun systemPropertyLoadedByRootBuild(key: Any, value: Any?) =
+        mode.toTrackingMode().systemPropertyLoadedByRootBuild(key, value)
 
     override fun systemPropertyLoaded(key: Any, value: Any?, oldValue: Any?) =
         mode.toTrackingMode().systemPropertyLoaded(key, value, oldValue)
@@ -144,12 +144,11 @@ class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory
             mutatedSystemProperties[key] = SystemPropertyOverride(key, value)
         }
 
-        fun systemPropertyLoadedByRootBuild(key: Any, value: Any?, oldValue: Any?) {
-            mutatedSystemProperties[key] = SystemPropertyRootLoad(key, value, oldValue)
+        fun systemPropertyLoadedByRootBuild(key: Any, value: Any?) {
+            mutatedSystemProperties[key] = SystemPropertyRootLoad(key, value)
         }
 
         fun systemPropertyLoaded(key: Any, value: Any?, oldValue: Any?) {
-
             val loadedOldValue = when (val loadedSystemProperty = mutatedSystemProperties[key]) {
                 is SystemPropertyRootLoad -> loadedSystemProperty.value
                 is SystemPropertyLoad -> loadedSystemProperty.oldValue
@@ -218,7 +217,7 @@ class DefaultEnvironmentChangeTracker(private val problemFactory: ProblemFactory
 
     class SystemPropertyOverride(key: Any, value: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
 
-    class SystemPropertyRootLoad(key: Any, value: Any?, val oldValue: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
+    class SystemPropertyRootLoad(key: Any, value: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
 
     class SystemPropertyLoad(key: Any, value: Any?, val oldValue: Any?) : SystemPropertySet(key, value, PropertyTrace.Unknown)
 

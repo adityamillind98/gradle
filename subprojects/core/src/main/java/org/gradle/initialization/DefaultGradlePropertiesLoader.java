@@ -66,7 +66,6 @@ public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
         setSystemPropertiesFromGradleProperties(defaultProperties);
         setSystemPropertiesFromGradleProperties(overrideProperties);
         setSystemPropertiesFromStartParameter(startParameter.getSystemPropertiesArgs());
-//        System.getProperties().putAll(startParameter.getSystemPropertiesArgs());
 
         overrideProperties.putAll(projectPropertiesFromEnvironmentVariables());
         overrideProperties.putAll(projectPropertiesFromSystemProperties());
@@ -116,7 +115,7 @@ public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
             if (key.length() > prefixLength && key.startsWith(prefix)) {
                 String systemPropertyKey = key.substring(prefixLength);
                 if (gradleInternal.isRootBuild()) {
-                    environmentChangeTracker.systemPropertyLoadedByRootBuild(systemPropertyKey, properties.get(key), System.getProperty(systemPropertyKey));
+                    environmentChangeTracker.systemPropertyLoadedByRootBuild(systemPropertyKey, properties.get(key));
                 } else {
                     environmentChangeTracker.systemPropertyLoaded(systemPropertyKey, properties.get(key), System.getProperty(systemPropertyKey));
                 }

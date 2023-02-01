@@ -292,8 +292,8 @@ class ConfigurationCacheFingerprintWriter(
             return
         }
         if (isSystemPropertyLoaded(key)) {
-//             Loaded values of the system properties are loaded from gradle.properties but never mutated.
-//             Thus, as a configuration input is an old value of property at load moment.
+            // Loaded values of the system properties are loaded from gradle.properties but never mutated.
+            // Thus, as a configuration input is an old value of property at load moment.
             val oldValue = environmentChangeTracker.getLoadedPropertyOldValue(key)
             sink().systemPropertyRead(key, oldValue)
             return

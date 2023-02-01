@@ -26,7 +26,7 @@ public interface EnvironmentChangeTracker {
 
     void systemPropertyChanged(Object key, @Nullable Object value, @Nullable String consumer);
 
-    void systemPropertyLoadedByRootBuild(Object key, @Nullable Object value, @Nullable Object oldValue);
+    void systemPropertyLoadedByRootBuild(Object key, @Nullable Object value);
 
     void systemPropertyLoaded(Object key, @Nullable Object value, @Nullable Object oldValue);
 

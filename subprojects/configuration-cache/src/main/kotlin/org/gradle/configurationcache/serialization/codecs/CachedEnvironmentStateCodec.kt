@@ -63,10 +63,10 @@ object CachedEnvironmentStateCodec : Codec<DefaultEnvironmentChangeTracker.Cache
                 DefaultEnvironmentChangeTracker.SystemPropertyMutate::class.java ->
                     DefaultEnvironmentChangeTracker.SystemPropertyMutate(key, value, PropertyTrace.Unknown)
                 DefaultEnvironmentChangeTracker.SystemPropertyRootLoad::class.java ->
-                    DefaultEnvironmentChangeTracker.SystemPropertyRootLoad(key, value, null)// TODO !!
+                    DefaultEnvironmentChangeTracker.SystemPropertyRootLoad(key, value)
                 DefaultEnvironmentChangeTracker.SystemPropertyLoad::class.java ->
                     DefaultEnvironmentChangeTracker.SystemPropertyLoad(key, value, null)
-                else -> throw IllegalStateException("Overridden properties shouldn't be stored") // TODO!!!!!
+                else -> throw IllegalStateException("Overridden properties shouldn't be stored")
             }
         }
 
