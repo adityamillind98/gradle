@@ -1,11 +1,14 @@
 package configurations
 
+import common.Arch
+import common.BuildToolBuildJvm
 import common.Os
 import common.applyDefaultSettings
 import common.buildToolGradleParameters
 import common.checkCleanM2
 import common.compileAllDependency
 import common.gradleWrapper
+import common.javaHome
 import jetbrains.buildServer.configs.kotlin.v2019_2.BuildFeatures
 import jetbrains.buildServer.configs.kotlin.v2019_2.BuildStep
 import jetbrains.buildServer.configs.kotlin.v2019_2.BuildSteps
@@ -141,17 +144,12 @@ fun BuildType.dumpOpenFiles() {
     }
 }
 
-private
-fun BaseGradleBuildType.killProcessStep(stepName: String, daemon: Boolean, os: Os) {
+fun BuildType.killProcessStep(stepName: String, os: Os, arch: Arch = Arch.AMD64) {
     steps {
-        gradleWrapper {
+        script {
             name = stepName
             executionMode = BuildStep.ExecutionMode.ALWAYS
-            tasks = "killExistingProcessesStartedByGradle"
-            gradleParams = (
-                buildToolGradleParameters(daemon) +
-                    "-DpublishStrategy=publishOnFailure" // https://github.com/gradle/gradle-enterprise-conventions-plugin/pull/8
-                ).joinToString(separator = " ")
+            scriptContent = "\"${javaHome(BuildToolBuildJvm, os, arch)}/bin/java\" buildSrc/subprojects/cleanup/src/main/java/gradlebuild/cleanup/services/KillLeakingJavaProcesses.java $stepName"
         }
     }
 }
@@ -159,7 +157,7 @@ fun BaseGradleBuildType.killProcessStep(stepName: String, daemon: Boolean, os: O
 fun applyDefaults(model: CIBuildModel, buildType: BaseGradleBuildType, gradleTasks: String, notQuick: Boolean = false, os: Os = Os.LINUX, extraParameters: String = "", timeout: Int = 90, extraSteps: BuildSteps.() -> Unit = {}, daemon: Boolean = true) {
     buildType.applyDefaultSettings(os, timeout)
 
-    buildType.killProcessStep("KILL_LEAKED_PROCESSES_FROM_PREVIOUS_BUILDS", daemon, os)
+    buildType.killProcessStep("KILL_LEAKED_PROCESSES_FROM_PREVIOUS_BUILDS", os)
     buildType.gradleRunnerStep(model, gradleTasks, os, extraParameters, daemon)
 
     buildType.steps {
@@ -192,14 +190,14 @@ fun applyTestDefaults(
         buildType.attachFileLeakDetector()
     }
 
-    buildType.killProcessStep("KILL_LEAKED_PROCESSES_FROM_PREVIOUS_BUILDS", daemon, os)
+    buildType.killProcessStep("KILL_LEAKED_PROCESSES_FROM_PREVIOUS_BUILDS", os)
 
     buildType.gradleRunnerStep(model, gradleTasks, os, extraParameters, daemon)
 
     if (os == Os.WINDOWS) {
         buildType.dumpOpenFiles()
     }
-    buildType.killProcessStep("KILL_PROCESSES_STARTED_BY_GRADLE", daemon, os)
+    buildType.killProcessStep("KILL_PROCESSES_STARTED_BY_GRADLE", os)
 
     buildType.steps {
         extraSteps()

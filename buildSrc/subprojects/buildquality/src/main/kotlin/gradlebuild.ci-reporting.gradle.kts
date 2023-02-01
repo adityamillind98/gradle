@@ -21,7 +21,6 @@ import gradlebuild.cleanup.extension.TestFileCleanUpExtension
 import gradlebuild.docs.FindBrokenInternalLinks
 import gradlebuild.integrationtests.tasks.DistributionTest
 import gradlebuild.performance.tasks.PerformanceTest
-import gradlebuild.cleanup.tasks.KillLeakingJavaProcesses
 import me.champeau.gradle.japicmp.JapicmpTask
 import org.gradle.api.internal.tasks.testing.junit.result.TestResultSerializer
 import java.io.FileOutputStream
@@ -51,15 +50,9 @@ if (BuildEnvironment.isCiServer) {
         val tmpTestFiles = subprojects.flatMap { it.tmpTestFiles() }
         prepareReportsForCiPublishing(failedTasks, executedTasks, tmpTestFiles)
         cleanUp(tmpTestFiles.map { it.first })
-        if (!isCleanupRunnerStep(gradle!!)) {
-            verifyTestFilesCleanup(failedTasks, tmpTestFiles)
-        }
+        verifyTestFilesCleanup(failedTasks, tmpTestFiles)
     }
 }
-
-
-fun isCleanupRunnerStep(gradle: Gradle) =
-    gradle.taskGraph.allTasks.any { it.state.executed && it is KillLeakingJavaProcesses }
 
 
 /**

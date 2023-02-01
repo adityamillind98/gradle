@@ -83,6 +83,7 @@ fun VcsSettings.filterDefaultBranch() {
 const val failedTestArtifactDestination = ".teamcity/gradle-logs"
 fun BuildType.applyDefaultSettings(os: Os = Os.LINUX, timeout: Int = 30, vcsRoot: String = "Gradle_GradleRelease6x") {
     artifactRules = """
+        *.psoutput => $failedTestArtifactDestination
         build/report-* => $failedTestArtifactDestination
         buildSrc/build/report-* => $failedTestArtifactDestination
         subprojects/*/build/tmp/test files/** => $failedTestArtifactDestination/test-files
