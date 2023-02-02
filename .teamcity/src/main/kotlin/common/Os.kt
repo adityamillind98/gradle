@@ -62,7 +62,6 @@ enum class Arch(val suffix: String, val nameOnLinuxWindows: String, val nameOnMa
 
 enum class Os(
     val agentRequirement: String,
-    val ignoredSubprojects: List<String> = emptyList(),
     val androidHome: String,
     val jprofilerHome: String,
     val killAllGradleProcesses: String,
@@ -88,7 +87,6 @@ enum class Os(
     ),
     MACOS(
         "Mac",
-        listOf("integ-test", "native", "plugins", "resources", "scala", "workers", "wrapper", "tooling-native"),
         androidHome = "/opt/android/sdk",
         jprofilerHome = "/Applications/JProfiler11.1.4.app",
         killAllGradleProcesses = killAllGradleProcessesUnixLike,

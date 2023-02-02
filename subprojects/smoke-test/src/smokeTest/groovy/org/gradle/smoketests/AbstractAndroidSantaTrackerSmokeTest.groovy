@@ -72,7 +72,13 @@ class AbstractAndroidSantaTrackerSmokeTest extends AbstractSmokeTest {
     }
 
     protected SmokeTestGradleRunner runnerForLocation(File projectDir, String agpVersion, String... tasks) {
-        def runnerArgs = [["-DagpVersion=$agpVersion", "-DkotlinVersion=$kotlinVersion", "--stacktrace"], tasks].flatten()
+        def runnerArgs = [[
+            // TODO: the versions of KGP we use still access Task.project from a cacheIf predicate
+            "-Dorg.gradle.configuration-cache.internal.task-execution-access-pre-stable=true",
+            "-DagpVersion=$agpVersion",
+            "-DkotlinVersion=$kotlinVersion",
+            "--stacktrace"],
+        tasks].flatten()
         def runner = runner(*runnerArgs)
             .withProjectDir(projectDir)
             .withTestKitDir(homeDir)

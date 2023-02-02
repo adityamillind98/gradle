@@ -22,10 +22,10 @@ import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory
 import org.gradle.api.internal.artifacts.Module
 import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal
+import org.gradle.api.internal.artifacts.configurations.DefaultConfigurationContainer
 import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvider
 import org.gradle.api.internal.artifacts.configurations.MutationValidator
 import org.gradle.api.internal.artifacts.configurations.ResolutionStrategyInternal
-import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider
 import org.gradle.api.internal.attributes.ImmutableAttributes
 import org.gradle.api.internal.project.ProjectStateRegistry
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier
@@ -34,7 +34,6 @@ import org.gradle.internal.component.local.model.BuildableLocalComponentMetadata
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata
 import org.gradle.util.TestUtil
 import spock.lang.Specification
-import org.gradle.api.internal.artifacts.configurations.DefaultConfigurationContainer
 
 class DefaultRootComponentMetadataBuilderTest extends Specification {
 
@@ -50,7 +49,6 @@ class DefaultRootComponentMetadataBuilderTest extends Specification {
         size() >> 1
     }
     ProjectStateRegistry projectStateRegistry = Mock()
-    DependencyLockingProvider dependencyLockingProvider = Mock()
 
     DefaultLocalComponentMetadata.DefaultLocalConfigurationMetadata configurationMetadata = Mock()
 
@@ -62,7 +60,6 @@ class DefaultRootComponentMetadataBuilderTest extends Specification {
         moduleIdentifierFactory,
         configurationComponentMetaDataBuilder,
         projectStateRegistry,
-        dependencyLockingProvider,
         TestUtil.calculatedValueContainerFactory()
     )
 
@@ -76,7 +73,7 @@ class DefaultRootComponentMetadataBuilderTest extends Specification {
 
         configurationComponentMetaDataBuilder.addConfiguration(_, _) >> { args ->
             BuildableLocalComponentMetadata componentMetadata = args[0]
-            componentMetadata.addConfiguration("conf", "", ImmutableSet.of(), ImmutableSet.of("conf"), true, true, ImmutableAttributes.EMPTY, true, null, false, ImmutableCapabilities.EMPTY, null)
+            componentMetadata.addConfiguration("conf", "", ImmutableSet.of(), ImmutableSet.of("conf"), true, true, ImmutableAttributes.EMPTY, true, null, false, ImmutableCapabilities.EMPTY)
             configurationMetadata
         }
     }
@@ -158,7 +155,7 @@ class DefaultRootComponentMetadataBuilderTest extends Specification {
 
         where:
         mutationType << [
-                MutationValidator.MutationType.ROLE,
+                MutationValidator.MutationType.USAGE,
                 MutationValidator.MutationType.STRATEGY,
         ]
     }

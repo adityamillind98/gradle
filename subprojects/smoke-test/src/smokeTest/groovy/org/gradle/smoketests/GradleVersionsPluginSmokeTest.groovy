@@ -53,7 +53,10 @@ class GradleVersionsPluginSmokeTest extends AbstractPluginValidatingSmokeTest {
         """
 
         when:
-        def runner = runner('dependencyUpdates', '-DoutputFormatter=txt').forwardOutput()
+        def runner = runner('dependencyUpdates', '-DoutputFormatter=txt')
+            // TODO: com.github.benmanes.gradle.versions.updates.DependencyUpdates plugin triggers dependency resolution at execution time
+            .withJvmArguments("-Dorg.gradle.configuration-cache.internal.task-execution-access-pre-stable=true")
+            .forwardOutput()
 
         def resolvedConfigurations = ["apiElementsCopy", "archivesCopy", "compileOnlyCopy", "defaultCopy", "implementationCopy", "implementationCopy2", "mainSourceElementsCopy", "runtimeElementsCopy", "runtimeOnlyCopy", "testCompileOnlyCopy", "testImplementationCopy", "testResultsElementsForTestCopy", "testRuntimeOnlyCopy"]
         def declarationConfiguration = ["compileClasspathCopy", "defaultCopy", "runtimeClasspathCopy", "runtimeElementsCopy", "testCompileClasspathCopy", "testRuntimeClasspathCopy"]

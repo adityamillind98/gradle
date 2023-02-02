@@ -18,6 +18,7 @@ package org.gradle.internal.service.scopes;
 
 import org.gradle.StartParameter;
 import org.gradle.api.Project;
+import org.gradle.api.flow.FlowScope;
 import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.ClassPathRegistry;
 import org.gradle.api.internal.DefaultClassPathProvider;
@@ -25,12 +26,14 @@ import org.gradle.api.internal.DefaultClassPathRegistry;
 import org.gradle.api.internal.DependencyClassPathProvider;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.ExternalProcessStartedListener;
+import org.gradle.api.internal.FeaturePreviews;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.DefaultModule;
 import org.gradle.api.internal.artifacts.Module;
 import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.internal.classpath.PluginModuleRegistry;
+import org.gradle.api.internal.collections.DomainObjectCollectionFactory;
 import org.gradle.api.internal.component.ComponentTypeRegistry;
 import org.gradle.api.internal.component.DefaultComponentTypeRegistry;
 import org.gradle.api.internal.file.DefaultArchiveOperations;
@@ -74,12 +77,15 @@ import org.gradle.api.internal.tasks.userinput.UserInputHandler;
 import org.gradle.api.invocation.BuildInvocationDetails;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ProviderFactory;
-import org.gradle.cache.CacheRepository;
+import org.gradle.api.services.internal.BuildServiceProvider;
+import org.gradle.api.services.internal.BuildServiceProviderNagger;
+import org.gradle.api.services.internal.DefaultBuildServicesRegistry;
+import org.gradle.cache.UnscopedCacheBuilderFactory;
 import org.gradle.cache.FileLockManager;
 import org.gradle.cache.internal.BuildScopeCacheDir;
-import org.gradle.cache.internal.scopes.DefaultBuildScopedCache;
-import org.gradle.cache.scopes.BuildScopedCache;
-import org.gradle.cache.scopes.GlobalScopedCache;
+import org.gradle.cache.internal.scopes.DefaultBuildScopedCacheBuilderFactory;
+import org.gradle.cache.scopes.BuildScopedCacheBuilderFactory;
+import org.gradle.cache.scopes.GlobalScopedCacheBuilderFactory;
 import org.gradle.caching.internal.BuildCacheServices;
 import org.gradle.configuration.BuildOperationFiringProjectsPreparer;
 import org.gradle.configuration.BuildTreePreparingProjectsPreparer;
@@ -112,6 +118,7 @@ import org.gradle.groovy.scripts.internal.CrossBuildInMemoryCachingScriptClassCa
 import org.gradle.groovy.scripts.internal.DefaultScriptCompilationHandler;
 import org.gradle.groovy.scripts.internal.DefaultScriptRunnerFactory;
 import org.gradle.groovy.scripts.internal.FileCacheBackedScriptClassCompiler;
+import org.gradle.groovy.scripts.internal.ScriptSourceListener;
 import org.gradle.groovy.scripts.internal.ScriptRunnerFactory;
 import org.gradle.initialization.BuildLoader;
 import org.gradle.initialization.BuildOperationFiringSettingsPreparer;
@@ -158,6 +165,7 @@ import org.gradle.internal.build.DefaultBuildWorkPreparer;
 import org.gradle.internal.build.DefaultPublicBuildPath;
 import org.gradle.internal.build.PublicBuildPath;
 import org.gradle.internal.buildevents.BuildStartedTime;
+import org.gradle.internal.buildoption.FeatureFlags;
 import org.gradle.internal.buildtree.BuildInclusionCoordinator;
 import org.gradle.internal.buildtree.BuildModelParameters;
 import org.gradle.internal.classloader.ClassLoaderFactory;
@@ -166,6 +174,7 @@ import org.gradle.internal.composite.DefaultBuildIncluder;
 import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.event.DefaultListenerManager;
 import org.gradle.internal.event.ListenerManager;
+import org.gradle.internal.execution.TaskExecutionTracker;
 import org.gradle.internal.file.Deleter;
 import org.gradle.internal.file.RelativeFilePathResolver;
 import org.gradle.internal.file.Stat;
@@ -186,6 +195,7 @@ import org.gradle.internal.resource.DefaultTextFileResourceLoader;
 import org.gradle.internal.resource.TextFileResourceLoader;
 import org.gradle.internal.resource.local.FileResourceListener;
 import org.gradle.internal.resources.ResourceLockCoordinationService;
+import org.gradle.internal.resources.SharedResourceLeaseRegistry;
 import org.gradle.internal.scripts.ScriptExecutionListener;
 import org.gradle.internal.service.CachingServiceLocator;
 import org.gradle.internal.service.DefaultServiceRegistry;
@@ -262,14 +272,14 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new ExecutionNodeAccessHierarchies(fileSystem.isCaseSensitive() ? CaseSensitivity.CASE_SENSITIVE : CaseSensitivity.CASE_INSENSITIVE, stat);
     }
 
-    protected BuildScopedCache createBuildScopedCache(
+    protected BuildScopedCacheBuilderFactory createBuildScopedCacheBuilderFactory(
         GradleUserHomeDirProvider userHomeDirProvider,
         BuildLayout buildLayout,
         StartParameter startParameter,
-        CacheRepository cacheRepository
+        UnscopedCacheBuilderFactory unscopedCacheBuilderFactory
     ) {
         BuildScopeCacheDir cacheDir = new BuildScopeCacheDir(userHomeDirProvider, buildLayout, startParameter);
-        return new DefaultBuildScopedCache(cacheDir.getDir(), cacheRepository);
+        return new DefaultBuildScopedCacheBuilderFactory(cacheDir.getDir(), unscopedCacheBuilderFactory);
     }
 
     protected BuildLayout createBuildLayout(BuildLayoutFactory buildLayoutFactory, BuildDefinition buildDefinition) {
@@ -429,7 +439,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected FileCacheBackedScriptClassCompiler createFileCacheBackedScriptClassCompiler(
         BuildOperationExecutor buildOperationExecutor,
-        GlobalScopedCache cacheRepository,
+        GlobalScopedCacheBuilderFactory cacheRepository,
         ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
         DefaultScriptCompilationHandler scriptCompilationHandler,
         CachedClasspathTransformer classpathTransformer,
@@ -443,10 +453,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             classpathTransformer);
     }
 
-    protected ScriptPluginFactory createScriptPluginFactory(InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext) {
+    protected ScriptPluginFactory createScriptPluginFactory(InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, ListenerManager listenerManager) {
         DefaultScriptPluginFactory defaultScriptPluginFactory = defaultScriptPluginFactory();
         ScriptPluginFactorySelector.ProviderInstantiator instantiator = ScriptPluginFactorySelector.defaultProviderInstantiatorFor(instantiatorFactory.inject(this));
-        ScriptPluginFactorySelector scriptPluginFactorySelector = new ScriptPluginFactorySelector(defaultScriptPluginFactory, instantiator, buildOperationExecutor, userCodeApplicationContext);
+        ScriptPluginFactorySelector scriptPluginFactorySelector = new ScriptPluginFactorySelector(defaultScriptPluginFactory, instantiator, buildOperationExecutor, userCodeApplicationContext, listenerManager.getBroadcaster(ScriptSourceListener.class));
         defaultScriptPluginFactory.setScriptPluginFactory(scriptPluginFactorySelector);
         return scriptPluginFactorySelector;
     }
@@ -637,5 +647,40 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected DefaultToolchainManagement createToolchainManagement(ObjectFactory objectFactory) {
         return objectFactory.newInstance(DefaultToolchainManagement.class);
+    }
+
+    protected SharedResourceLeaseRegistry createSharedResourceLeaseRegistry(ResourceLockCoordinationService coordinationService) {
+        return new SharedResourceLeaseRegistry(coordinationService);
+    }
+
+    protected DefaultBuildServicesRegistry createSharedServiceRegistry(
+        BuildState buildState,
+        Instantiator instantiator,
+        DomainObjectCollectionFactory factory,
+        InstantiatorFactory instantiatorFactory,
+        ServiceRegistry services,
+        ListenerManager listenerManager,
+        IsolatableFactory isolatableFactory,
+        SharedResourceLeaseRegistry sharedResourceLeaseRegistry,
+        FeatureFlags featureFlags
+    ) {
+        // TODO:configuration-cache remove this hack
+        // HACK: force the instantiation of FlowScope so its listeners are registered before DefaultBuildServicesRegistry's
+        services.find(FlowScope.class);
+
+        // Instantiate via `instantiator` for the DSL decorations to the `BuildServiceRegistry` API
+        return instantiator.newInstance(
+            DefaultBuildServicesRegistry.class,
+            buildState.getBuildIdentifier(),
+            factory,
+            instantiatorFactory,
+            services,
+            listenerManager,
+            isolatableFactory,
+            sharedResourceLeaseRegistry,
+            featureFlags.isEnabled(FeaturePreviews.Feature.STABLE_CONFIGURATION_CACHE)
+                ? new BuildServiceProviderNagger(services.get(TaskExecutionTracker.class))
+                : BuildServiceProvider.Listener.EMPTY
+        );
     }
 }

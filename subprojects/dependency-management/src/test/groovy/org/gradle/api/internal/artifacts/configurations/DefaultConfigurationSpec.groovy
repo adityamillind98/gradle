@@ -42,11 +42,14 @@ import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.api.internal.DomainObjectContext
 import org.gradle.api.internal.artifacts.ConfigurationResolver
 import org.gradle.api.internal.artifacts.DefaultExcludeRule
+import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
 import org.gradle.api.internal.artifacts.DefaultResolverResults
 import org.gradle.api.internal.artifacts.DependencyResolutionServices
 import org.gradle.api.internal.artifacts.ResolverResults
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency
 import org.gradle.api.internal.artifacts.dsl.PublishArtifactNotationParserFactory
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider
 import org.gradle.api.internal.artifacts.ivyservice.DefaultLenientConfiguration
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.RootComponentMetadataBuilder
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor
@@ -63,9 +66,12 @@ import org.gradle.api.specs.Spec
 import org.gradle.api.tasks.TaskDependency
 import org.gradle.configuration.internal.UserCodeApplicationContext
 import org.gradle.internal.Factories
+import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier
+import org.gradle.internal.component.model.DependencyMetadata
 import org.gradle.internal.dispatch.Dispatch
 import org.gradle.internal.event.AnonymousListenerBroadcast
 import org.gradle.internal.event.ListenerManager
+import org.gradle.internal.locking.DefaultDependencyLockingState
 import org.gradle.internal.model.CalculatedValueContainerFactory
 import org.gradle.internal.operations.TestBuildOperationExecutor
 import org.gradle.internal.reflect.DirectInstantiator
@@ -92,6 +98,8 @@ class DefaultConfigurationSpec extends Specification {
     def resolver = Mock(ConfigurationResolver)
     def listenerManager = Mock(ListenerManager)
     def metaDataProvider = Mock(DependencyMetaDataProvider)
+    def componentIdentifierFactory = Mock(ComponentIdentifierFactory)
+    def dependencyLockingProvider = Mock(DependencyLockingProvider)
     def resolutionStrategy = Mock(ResolutionStrategyInternal)
     def immutableAttributesFactory = AttributeTestUtil.attributesFactory()
     def rootComponentMetadataBuilder = Mock(RootComponentMetadataBuilder)
@@ -766,7 +774,7 @@ class DefaultConfigurationSpec extends Specification {
 
         when:
         configuration.deprecateForConsumption(x -> x.willBecomeAnErrorInGradle9().undocumented())
-        configuration.deprecateForDeclaration("declaration")
+        configuration.deprecateForDeclarationAgainst("declaration")
         configuration.deprecateForResolution("resolution")
         configuration.canBeConsumed = enabled
         configuration.canBeResolved = enabled
@@ -782,6 +790,9 @@ class DefaultConfigurationSpec extends Specification {
         copy.consumptionDeprecation != null
         copy.declarationAlternatives == ["declaration"]
         copy.resolutionAlternatives == ["resolution"]
+        copy.roleAtCreation.consumptionDeprecated
+        copy.roleAtCreation.resolutionDeprecated
+        copy.roleAtCreation.declarationAgainstDeprecated
 
         where:
         state | enabled
@@ -810,6 +821,9 @@ class DefaultConfigurationSpec extends Specification {
         copy.consumptionDeprecation != null
         copy.declarationAlternatives == []
         copy.resolutionAlternatives == []
+        copy.roleAtCreation.consumptionDeprecated
+        copy.roleAtCreation.resolutionDeprecated
+        copy.roleAtCreation.declarationAgainstDeprecated
     }
 
     def "can copy with spec"() {
@@ -1758,6 +1772,98 @@ All Artifacts:
         stacktrace.contains("The settings are not yet available for build")
     }
 
+    def "locking usage changes prevents #usageName usage changes"() {
+        given:
+        def conf = conf()
+        conf.preventUsageMutation()
+
+        when:
+        changeUsage(conf)
+
+        then:
+        GradleException t = thrown()
+        t.message == "Cannot change the allowed usage of configuration ':conf', as it has been locked."
+
+        where:
+        usageName               | changeUsage
+        'consumable'            | { it.setCanBeConsumed(!it.isCanBeConsumed()) }
+        'resolvable'            | { it.setCanBeResolved(!it.isCanBeResolved()) }
+        'declarable against'    | { it.setCanBeDeclaredAgainst(!it.isCanBeDeclaredAgainst()) }
+    }
+
+    def "locking all changes prevents #usageName usage changes"() {
+        given:
+        def conf = conf()
+        conf.preventFromFurtherMutation()
+
+        when:
+        changeUsage(conf)
+
+        then:
+        GradleException t = thrown()
+        t.message == "Cannot change the allowed usage of configuration ':conf', as it has been locked."
+
+        where:
+        usageName               | changeUsage
+        'consumable'            | { it.setCanBeConsumed(!it.isCanBeConsumed()) }
+        'resolvable'            | { it.setCanBeResolved(!it.isCanBeResolved()) }
+        'declarable against'    | { it.setCanBeDeclaredAgainst(!it.isCanBeDeclaredAgainst()) }
+    }
+
+    def 'locking constraints are attached to a configuration and not its children'() {
+        given:
+        def constraint = DefaultModuleComponentIdentifier.newId(DefaultModuleIdentifier.newId('org', 'foo'), '1.1')
+        resolutionStrategy.isDependencyLockingEnabled() >> true
+        dependencyLockingProvider.loadLockState("conf") >> new DefaultDependencyLockingState(true, [constraint] as Set, { entry -> false })
+        dependencyLockingProvider.loadLockState("child") >> DefaultDependencyLockingState.EMPTY_LOCK_CONSTRAINT
+
+        when:
+        def child = conf("child")
+        def conf = conf()
+        child.extendsFrom(conf)
+
+        then:
+        conf.syntheticDependencies.size() == 1
+        child.syntheticDependencies.size() == 0
+    }
+
+    def 'locking constraints are not transitive'() {
+        given:
+        def constraint = DefaultModuleComponentIdentifier.newId(DefaultModuleIdentifier.newId('org', 'foo'), '1.1')
+        resolutionStrategy.isDependencyLockingEnabled() >> true
+        dependencyLockingProvider.loadLockState("conf") >> new DefaultDependencyLockingState(true, [constraint] as Set, {entry -> false })
+
+        when:
+        def conf = conf()
+
+        then:
+        conf.syntheticDependencies.size() == 1
+        conf.syntheticDependencies.each {
+            assert !it.transitive
+        }
+    }
+
+    def 'provides useful reason for locking constraints (#strict)'() {
+        given:
+        def constraint = DefaultModuleComponentIdentifier.newId(DefaultModuleIdentifier.newId('org', 'foo'), '1.1')
+        resolutionStrategy.isDependencyLockingEnabled() >> true
+        dependencyLockingProvider.loadLockState("conf") >> new DefaultDependencyLockingState(strict, [constraint] as Set, {entry -> false })
+
+        when:
+        def conf = conf()
+
+        then:
+        conf.syntheticDependencies.size() == 1
+        conf.syntheticDependencies.each { DependencyMetadata dep ->
+            assert dep.reason == reason
+        }
+
+        where:
+        reason                                                          | strict
+        "dependency was locked to version '1.1'"                        | true
+        "dependency was locked to version '1.1' (update/lenient mode)"  | false
+    }
+
     private DefaultConfiguration configurationWithExcludeRules(ExcludeRule... rules) {
         def config = conf()
         config.setExcludeRules(rules as LinkedHashSet)
@@ -1804,21 +1910,22 @@ All Artifacts:
             resolver,
             listenerManager,
             metaDataProvider,
+            componentIdentifierFactory,
+            dependencyLockingProvider,
             domainObjectContext,
             TestFiles.fileCollectionFactory(),
             new TestBuildOperationExecutor(),
             publishArtifactNotationParser,
             immutableAttributesFactory,
             Stub(DocumentationRegistry),
-            userCodeApplicationContext
-            ,
+            userCodeApplicationContext,
             projectStateRegistry,
             Stub(WorkerThreadRegistry),
             TestUtil.domainObjectCollectionFactory(),
             calculatedValueContainerFactory,
             TestFiles.taskDependencyFactory()
         )
-        defaultConfigurationFactory.create(confName, configurationsProvider, Factories.constant(resolutionStrategy), rootComponentMetadataBuilder)
+        defaultConfigurationFactory.create(confName, configurationsProvider, Factories.constant(resolutionStrategy), rootComponentMetadataBuilder, ConfigurationRoles.LEGACY, false)
     }
 
     private DefaultPublishArtifact artifact(String name) {

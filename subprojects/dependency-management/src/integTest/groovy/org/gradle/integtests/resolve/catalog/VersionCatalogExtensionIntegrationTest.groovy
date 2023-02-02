@@ -1920,14 +1920,47 @@ Second: 1.1"""
         verifyContains(failure.error, reservedAlias {
             inCatalog("libs")
             alias(reserved)
-            reservedAliases "extensions", "class", "convention"
+            reservedAliases "extensions", "convention"
         })
 
         where:
         reserved << [
             "extensions",
-            "class",
             "convention"
+        ]
+    }
+
+    @VersionCatalogProblemTestFor(
+        VersionCatalogProblemId.RESERVED_ALIAS_NAME
+    )
+    @Issue("https://github.com/gradle/gradle/issues/23106")
+    def "disallows aliases which contain a name that clashes with Java methods"() {
+        settingsFile << """
+            dependencyResolutionManagement {
+                versionCatalogs {
+                    libs {
+                        library("$reserved", "org:lib1:1.0")
+                    }
+                }
+            }
+        """
+
+        when:
+        executer.withStacktraceEnabled()
+        fails "help"
+
+        then:
+        verifyContains(failure.error, reservedAlias {
+            inCatalog("libs")
+            shouldNotContain(reserved)
+            reservedNames "class"
+        })
+
+        where:
+        reserved << [
+            "class",
+            "my-class",
+            "my-class-lib"
         ]
     }
 
@@ -2335,9 +2368,11 @@ Second: 1.1"""
                 assert original.targetConfiguration == copied.targetConfiguration
                 assert original.attributes == copied.attributes
                 assert original.requestedCapabilities == copied.requestedCapabilities
+                assert original.endorsingStrictVersions == copied.endorsingStrictVersions
 
                 // ExternalDependency + ExternalModuleDependency
                 assert original.changing == copied.changing
+                assert original.versionConstraint == copied.versionConstraint
             }
 
             def getOriginal(dep) {

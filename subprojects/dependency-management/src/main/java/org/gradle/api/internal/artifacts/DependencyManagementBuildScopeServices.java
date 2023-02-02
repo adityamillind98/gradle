@@ -29,7 +29,7 @@ import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvid
 import org.gradle.api.internal.artifacts.dsl.CapabilityNotationParser;
 import org.gradle.api.internal.artifacts.dsl.CapabilityNotationParserFactory;
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactoryInternal;
-import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
+import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingAccessCoordinator;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheMetadata;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCachesProvider;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ChangingValueDependencyResolutionListener;
@@ -108,8 +108,6 @@ import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.filestore.ArtifactIdentifierFileStore;
-import org.gradle.api.internal.filestore.DefaultArtifactIdentifierFileStore;
-import org.gradle.api.internal.filestore.TwoStageArtifactIdentifierFileStore;
 import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.api.internal.notations.ClientModuleNotationParserFactory;
 import org.gradle.api.internal.notations.DependencyConstraintNotationParser;
@@ -125,8 +123,8 @@ import org.gradle.cache.internal.CleaningInMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.GeneratedGradleJarCache;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.ProducerGuard;
-import org.gradle.cache.scopes.BuildScopedCache;
-import org.gradle.cache.scopes.GlobalScopedCache;
+import org.gradle.cache.scopes.BuildScopedCacheBuilderFactory;
+import org.gradle.cache.scopes.GlobalScopedCacheBuilderFactory;
 import org.gradle.configuration.internal.UserCodeApplicationContext;
 import org.gradle.initialization.DependenciesAccessors;
 import org.gradle.initialization.internal.InternalBuildFinishedListener;
@@ -191,13 +189,8 @@ import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor
 import org.gradle.internal.resolve.caching.DesugaringAttributeContainerSerializer;
 import org.gradle.internal.resource.ExternalResourceName;
 import org.gradle.internal.resource.TextUriResourceLoader;
-import org.gradle.internal.resource.cached.ByUrlCachedExternalResourceIndex;
-import org.gradle.internal.resource.cached.CachedExternalResourceIndex;
-import org.gradle.internal.resource.cached.DefaultExternalResourceFileStore;
-import org.gradle.internal.resource.cached.ExternalResourceFileStore;
-import org.gradle.internal.resource.cached.TwoStageByUrlCachedExternalResourceIndex;
-import org.gradle.internal.resource.cached.TwoStageExternalResourceFileStore;
 import org.gradle.internal.resource.connector.ResourceConnectorFactory;
+import org.gradle.internal.resource.local.FileResourceConnector;
 import org.gradle.internal.resource.local.FileResourceListener;
 import org.gradle.internal.resource.local.FileResourceRepository;
 import org.gradle.internal.resource.local.LocallyAvailableResourceFinder;
@@ -221,15 +214,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
- * The set of dependency management services that are created per build.
+ * The set of dependency management services that are created per build in the tree.
  */
 class DependencyManagementBuildScopeServices {
     void configure(ServiceRegistration registration) {
-        registration.add(DefaultExternalResourceFileStore.Factory.class);
-        registration.add(DefaultArtifactIdentifierFileStore.Factory.class);
         registration.add(TransformationNodeDependencyResolver.class);
         registration.add(DefaultProjectLocalComponentProvider.class);
         registration.add(DefaultProjectPublicationRegistry.class);
+        registration.add(FileResourceConnector.class);
     }
 
     DependencyResolutionManagementInternal createSharedDependencyResolutionServices(Instantiator instantiator,
@@ -366,14 +358,14 @@ class DependencyManagementBuildScopeServices {
         return new ModuleRepositoryCacheProvider(persistentCaches, inMemoryOnlyCaches);
     }
 
-    private ModuleRepositoryCaches prepareModuleRepositoryCaches(ArtifactCacheMetadata artifactCacheMetadata, ArtifactCacheLockingManager artifactCacheLockingManager, BuildCommencedTimeProvider timeProvider, ImmutableModuleIdentifierFactory moduleIdentifierFactory, AttributeContainerSerializer attributeContainerSerializer, MavenMutableModuleMetadataFactory mavenMetadataFactory, IvyMutableModuleMetadataFactory ivyMetadataFactory, SimpleMapInterner stringInterner, ArtifactIdentifierFileStore artifactIdentifierFileStore, ModuleSourcesSerializer moduleSourcesSerializer, ChecksumService checksumService) {
+    private ModuleRepositoryCaches prepareModuleRepositoryCaches(ArtifactCacheMetadata artifactCacheMetadata, ArtifactCacheLockingAccessCoordinator cacheAccessCoordinator, BuildCommencedTimeProvider timeProvider, ImmutableModuleIdentifierFactory moduleIdentifierFactory, AttributeContainerSerializer attributeContainerSerializer, MavenMutableModuleMetadataFactory mavenMetadataFactory, IvyMutableModuleMetadataFactory ivyMetadataFactory, SimpleMapInterner stringInterner, ArtifactIdentifierFileStore artifactIdentifierFileStore, ModuleSourcesSerializer moduleSourcesSerializer, ChecksumService checksumService) {
         DefaultModuleVersionsCache moduleVersionsCache = new DefaultModuleVersionsCache(
             timeProvider,
-            artifactCacheLockingManager,
+            cacheAccessCoordinator,
             moduleIdentifierFactory);
         PersistentModuleMetadataCache moduleMetadataCache = new PersistentModuleMetadataCache(
             timeProvider,
-            artifactCacheLockingManager,
+            cacheAccessCoordinator,
             artifactCacheMetadata,
             moduleIdentifierFactory,
             attributeContainerSerializer,
@@ -384,12 +376,12 @@ class DependencyManagementBuildScopeServices {
             checksumService);
         DefaultModuleArtifactsCache moduleArtifactsCache = new DefaultModuleArtifactsCache(
             timeProvider,
-            artifactCacheLockingManager
+            cacheAccessCoordinator
         );
         DefaultModuleArtifactCache moduleArtifactCache = new DefaultModuleArtifactCache(
             "module-artifact",
             timeProvider,
-            artifactCacheLockingManager,
+            cacheAccessCoordinator,
             artifactIdentifierFileStore.getFileAccessTracker(),
             artifactCacheMetadata.getCacheDir().toPath()
         );
@@ -401,14 +393,14 @@ class DependencyManagementBuildScopeServices {
         );
     }
 
-    private ModuleRepositoryCaches prepareReadOnlyModuleRepositoryCaches(ArtifactCacheMetadata artifactCacheMetadata, ArtifactCacheLockingManager artifactCacheLockingManager, BuildCommencedTimeProvider timeProvider, ImmutableModuleIdentifierFactory moduleIdentifierFactory, AttributeContainerSerializer attributeContainerSerializer, MavenMutableModuleMetadataFactory mavenMetadataFactory, IvyMutableModuleMetadataFactory ivyMetadataFactory, SimpleMapInterner stringInterner, ArtifactIdentifierFileStore artifactIdentifierFileStore, ModuleSourcesSerializer moduleSourcesSerializer, ChecksumService checksumService) {
+    private ModuleRepositoryCaches prepareReadOnlyModuleRepositoryCaches(ArtifactCacheMetadata artifactCacheMetadata, ArtifactCacheLockingAccessCoordinator cacheAccessCoordinator, BuildCommencedTimeProvider timeProvider, ImmutableModuleIdentifierFactory moduleIdentifierFactory, AttributeContainerSerializer attributeContainerSerializer, MavenMutableModuleMetadataFactory mavenMetadataFactory, IvyMutableModuleMetadataFactory ivyMetadataFactory, SimpleMapInterner stringInterner, ArtifactIdentifierFileStore artifactIdentifierFileStore, ModuleSourcesSerializer moduleSourcesSerializer, ChecksumService checksumService) {
         ReadOnlyModuleVersionsCache moduleVersionsCache = new ReadOnlyModuleVersionsCache(
             timeProvider,
-            artifactCacheLockingManager,
+            cacheAccessCoordinator,
             moduleIdentifierFactory);
         ReadOnlyModuleMetadataCache moduleMetadataCache = new ReadOnlyModuleMetadataCache(
             timeProvider,
-            artifactCacheLockingManager,
+            cacheAccessCoordinator,
             artifactCacheMetadata,
             moduleIdentifierFactory,
             attributeContainerSerializer,
@@ -419,12 +411,12 @@ class DependencyManagementBuildScopeServices {
             checksumService);
         ReadOnlyModuleArtifactsCache moduleArtifactsCache = new ReadOnlyModuleArtifactsCache(
             timeProvider,
-            artifactCacheLockingManager
+            cacheAccessCoordinator
         );
         ReadOnlyModuleArtifactCache moduleArtifactCache = new ReadOnlyModuleArtifactCache(
             "module-artifact",
             timeProvider,
-            artifactCacheLockingManager,
+            cacheAccessCoordinator,
             artifactIdentifierFileStore.getFileAccessTracker(),
             artifactCacheMetadata.getCacheDir().toPath()
         );
@@ -433,36 +425,6 @@ class DependencyManagementBuildScopeServices {
             moduleMetadataCache,
             moduleArtifactsCache,
             moduleArtifactCache
-        );
-    }
-
-    FileStoreAndIndexProvider createFileStoreAndIndexProvider(
-        BuildCommencedTimeProvider timeProvider,
-        ArtifactCachesProvider artifactCaches,
-        DefaultExternalResourceFileStore.Factory defaultExternalResourceFileStoreFactory,
-        DefaultArtifactIdentifierFileStore.Factory defaultArtifactIdentifierFileStoreFactory
-    ) {
-        ExternalResourceFileStore writableFileStore = defaultExternalResourceFileStoreFactory.create(artifactCaches.getWritableCacheMetadata());
-        ExternalResourceFileStore externalResourceFileStore = artifactCaches.withReadOnlyCache((md, manager) ->
-            (ExternalResourceFileStore) new TwoStageExternalResourceFileStore(defaultExternalResourceFileStoreFactory.create(md), writableFileStore)).orElse(writableFileStore);
-        CachedExternalResourceIndex<String> writableByUrlCachedExternalResourceIndex = prepareArtifactUrlCachedResolutionIndex(timeProvider, artifactCaches.getWritableCacheLockingManager(), externalResourceFileStore, artifactCaches.getWritableCacheMetadata());
-        ArtifactIdentifierFileStore writableArtifactIdentifierFileStore = artifactCaches.withWritableCache((md, manager) -> defaultArtifactIdentifierFileStoreFactory.create(md));
-        ArtifactIdentifierFileStore artifactIdentifierFileStore = artifactCaches.withReadOnlyCache((md, manager) -> (ArtifactIdentifierFileStore) new TwoStageArtifactIdentifierFileStore(
-            defaultArtifactIdentifierFileStoreFactory.create(md),
-            writableArtifactIdentifierFileStore
-        )).orElse(writableArtifactIdentifierFileStore);
-        return new FileStoreAndIndexProvider(
-            artifactCaches.withReadOnlyCache((md, manager) -> (CachedExternalResourceIndex<String>) new TwoStageByUrlCachedExternalResourceIndex(md.getCacheDir().toPath(), prepareArtifactUrlCachedResolutionIndex(timeProvider, manager, externalResourceFileStore, md), writableByUrlCachedExternalResourceIndex)).orElse(writableByUrlCachedExternalResourceIndex),
-            externalResourceFileStore, artifactIdentifierFileStore);
-    }
-
-    private ByUrlCachedExternalResourceIndex prepareArtifactUrlCachedResolutionIndex(BuildCommencedTimeProvider timeProvider, ArtifactCacheLockingManager artifactCacheLockingManager, ExternalResourceFileStore externalResourceFileStore, ArtifactCacheMetadata artifactCacheMetadata) {
-        return new ByUrlCachedExternalResourceIndex(
-            "resource-at-url",
-            timeProvider,
-            artifactCacheLockingManager,
-            externalResourceFileStore.getFileAccessTracker(),
-            artifactCacheMetadata.getCacheDir().toPath()
         );
     }
 
@@ -507,8 +469,7 @@ class DependencyManagementBuildScopeServices {
                                                                 ProducerGuard<ExternalResourceName> producerGuard,
                                                                 FileResourceRepository fileResourceRepository,
                                                                 ChecksumService checksumService,
-                                                                StartParameterResolutionOverride startParameterResolutionOverride,
-                                                                ListenerManager listenerManager) {
+                                                                StartParameterResolutionOverride startParameterResolutionOverride) {
         return artifactCachesProvider.withWritableCache((md, manager) -> new RepositoryTransportFactory(
             resourceConnectorFactories,
             temporaryFileProvider,
@@ -519,8 +480,8 @@ class DependencyManagementBuildScopeServices {
             startParameterResolutionOverride,
             producerGuard,
             fileResourceRepository,
-            checksumService,
-            listenerManager.getBroadcaster(FileResourceListener.class)));
+            checksumService
+        ));
     }
 
     RepositoryDisabler createRepositoryDisabler() {
@@ -535,7 +496,7 @@ class DependencyManagementBuildScopeServices {
                                                                         ListenerManager listenerManager,
                                                                         BuildCommencedTimeProvider timeProvider,
                                                                         ServiceRegistry serviceRegistry) {
-        DependencyVerificationOverride override = startParameterResolutionOverride.dependencyVerificationOverride(buildOperationExecutor, checksumService, signatureVerificationServiceFactory, documentationRegistry, timeProvider, () -> serviceRegistry.get(GradleProperties.class));
+        DependencyVerificationOverride override = startParameterResolutionOverride.dependencyVerificationOverride(buildOperationExecutor, checksumService, signatureVerificationServiceFactory, documentationRegistry, timeProvider, () -> serviceRegistry.get(GradleProperties.class), listenerManager.getBroadcaster(FileResourceListener.class));
         registerBuildFinishedHooks(listenerManager, override);
         return override;
     }
@@ -630,15 +591,15 @@ class DependencyManagementBuildScopeServices {
     }
 
     ComponentMetadataRuleExecutor createComponentMetadataRuleExecutor(ValueSnapshotter valueSnapshotter,
-                                                                      GlobalScopedCache globalScopedCache,
+                                                                      GlobalScopedCacheBuilderFactory cacheBuilderFactory,
                                                                       InMemoryCacheDecoratorFactory cacheDecoratorFactory,
                                                                       BuildCommencedTimeProvider timeProvider,
                                                                       ModuleComponentResolveMetadataSerializer serializer) {
-        return new ComponentMetadataRuleExecutor(globalScopedCache, cacheDecoratorFactory, valueSnapshotter, timeProvider, serializer);
+        return new ComponentMetadataRuleExecutor(cacheBuilderFactory, cacheDecoratorFactory, valueSnapshotter, timeProvider, serializer);
     }
 
     ComponentMetadataSupplierRuleExecutor createComponentMetadataSupplierRuleExecutor(ValueSnapshotter snapshotter,
-                                                                                      GlobalScopedCache globalScopedCache,
+                                                                                      GlobalScopedCacheBuilderFactory cacheBuilderFactory,
                                                                                       InMemoryCacheDecoratorFactory cacheDecoratorFactory,
                                                                                       final BuildCommencedTimeProvider timeProvider,
                                                                                       SuppliedComponentMetadataSerializer suppliedComponentMetadataSerializer,
@@ -651,18 +612,20 @@ class DependencyManagementBuildScopeServices {
                 }
             });
         }
-        return new ComponentMetadataSupplierRuleExecutor(globalScopedCache, cacheDecoratorFactory, snapshotter, timeProvider, suppliedComponentMetadataSerializer);
+        return new ComponentMetadataSupplierRuleExecutor(cacheBuilderFactory, cacheDecoratorFactory, snapshotter, timeProvider, suppliedComponentMetadataSerializer);
     }
 
-    SignatureVerificationServiceFactory createSignatureVerificationServiceFactory(GlobalScopedCache globalScopedCache,
-                                                                                  InMemoryCacheDecoratorFactory decoratorFactory,
-                                                                                  RepositoryTransportFactory transportFactory,
-                                                                                  BuildOperationExecutor buildOperationExecutor,
-                                                                                  BuildCommencedTimeProvider timeProvider,
-                                                                                  BuildScopedCache buildScopedCache,
-                                                                                  FileHasher fileHasher,
-                                                                                  StartParameter startParameter) {
-        return new DefaultSignatureVerificationServiceFactory(transportFactory, globalScopedCache, decoratorFactory, buildOperationExecutor, fileHasher, buildScopedCache, timeProvider, startParameter.isRefreshKeys());
+    SignatureVerificationServiceFactory createSignatureVerificationServiceFactory(
+            GlobalScopedCacheBuilderFactory cacheBuilderFactory,
+            InMemoryCacheDecoratorFactory decoratorFactory,
+            RepositoryTransportFactory transportFactory,
+            BuildOperationExecutor buildOperationExecutor,
+            BuildCommencedTimeProvider timeProvider,
+            BuildScopedCacheBuilderFactory buildScopedCacheBuilderFactory,
+            FileHasher fileHasher,
+            StartParameter startParameter,
+            ListenerManager listenerManager) {
+        return new DefaultSignatureVerificationServiceFactory(transportFactory, cacheBuilderFactory, decoratorFactory, buildOperationExecutor, fileHasher, buildScopedCacheBuilderFactory, timeProvider, startParameter.isRefreshKeys(), listenerManager.getBroadcaster(FileResourceListener.class));
     }
 
     private void registerBuildFinishedHooks(ListenerManager listenerManager, DependencyVerificationOverride dependencyVerificationOverride) {
@@ -711,7 +674,7 @@ class DependencyManagementBuildScopeServices {
         UniqueId fixedUniqueId = UniqueId.from("dhwwyv4tqrd43cbxmdsf24wquu");
         // @formatter:off
         return new DefaultExecutionEngine(documentationRegistry,
-            new IdentifyStep<>(
+            new IdentifyStep<>(buildOperationExecutor,
             new IdentityCacheStep<>(
             new AssignWorkspaceStep<>(
             new LoadPreviousExecutionStateStep<>(

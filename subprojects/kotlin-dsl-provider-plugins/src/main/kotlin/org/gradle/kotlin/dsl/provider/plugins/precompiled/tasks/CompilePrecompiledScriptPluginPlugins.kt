@@ -44,6 +44,9 @@ import org.gradle.kotlin.dsl.support.scriptDefinitionFromTemplate
 import javax.inject.Inject
 
 
+/**
+ * Compiles the extracted `plugins {}` blocks from precompiled scripts of all targets.
+ */
 @CacheableTask
 abstract class CompilePrecompiledScriptPluginPlugins @Inject constructor(
 
@@ -107,6 +110,7 @@ abstract class CompilePrecompiledScriptPluginPlugins @Inject constructor(
         }
     }
 
+    @Suppress("DEPRECATION")
     private
     fun resolveJvmTarget(): JavaVersion =
         if (jvmTarget.isPresent) jvmTarget.get()

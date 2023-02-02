@@ -145,12 +145,15 @@ include("enterprise-logging")
 include("enterprise-workers")
 include("build-operations")
 include("problems")
+include("instrumentation-agent")
 
 // Plugin portal projects
 include("kotlin-dsl-plugins")
 
 // Internal utility and verification projects
 include("docs")
+include("docs-asciidoctor-extensions-base")
+include("docs-asciidoctor-extensions")
 include("samples")
 include("architecture-test")
 include("internal-testing")
@@ -188,6 +191,6 @@ gradle.settingsEvaluated {
     }
 
     if (!JavaVersion.current().isJava11) {
-        throw GradleException("This build requires JDK 11. It's currently ${getBuildJavaHome()}. You can ignore this check by passing '-Dorg.gradle.ignoreBuildJavaVersionCheck'.")
+        throw GradleException("This build requires JDK 11. It's currently ${getBuildJavaHome()}. You can ignore this check by passing '-Dorg.gradle.ignoreBuildJavaVersionCheck=true'.")
     }
 }

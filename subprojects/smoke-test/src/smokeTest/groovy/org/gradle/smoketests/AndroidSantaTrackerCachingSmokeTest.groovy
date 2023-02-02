@@ -16,7 +16,6 @@
 
 package org.gradle.smoketests
 
-import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.gradle.testkit.runner.BuildResult
 
 import static org.gradle.testkit.runner.TaskOutcome.FROM_CACHE
@@ -27,7 +26,6 @@ import static org.gradle.testkit.runner.TaskOutcome.UP_TO_DATE
 
 class AndroidSantaTrackerCachingSmokeTest extends AbstractAndroidSantaTrackerSmokeTest {
 
-    @UnsupportedWithConfigurationCache(iterationMatchers = AGP_NO_CC_ITERATION_MATCHER)
     def "can cache Santa Tracker Android application (agp=#agpVersion)"() {
 
         given:
@@ -42,18 +40,33 @@ class AndroidSantaTrackerCachingSmokeTest extends AbstractAndroidSantaTrackerSmo
         setupCopyOfSantaTracker(relocatedDir)
 
         when: 'clean build'
+        SantaTrackerConfigurationCacheWorkaround.beforeBuild(originalDir, homeDir)
         buildLocationMaybeExpectingWorkerExecutorDeprecation(originalDir, agpVersion)
 
         then:
         assertConfigurationCacheStateStored()
 
+        // TODO - this is here because AGP >=7.4 reads build/generated/source/kapt/debug at configuration time
         when: 'up-to-date build, reusing configuration cache when enabled'
+        SantaTrackerConfigurationCacheWorkaround.beforeBuild(originalDir, homeDir)
+        buildLocation(originalDir, agpVersion)
+
+        then:
+        if (agpVersion.startsWith('7.3')) {
+            assertConfigurationCacheStateLoaded()
+        } else {
+            assertConfigurationCacheStateStored()
+        }
+
+        when: 'up-to-date build, reusing configuration cache when enabled'
+        SantaTrackerConfigurationCacheWorkaround.beforeBuild(originalDir, homeDir)
         buildLocation(originalDir, agpVersion)
 
         then:
         assertConfigurationCacheStateLoaded()
 
         when: 'clean cached build'
+        SantaTrackerConfigurationCacheWorkaround.beforeBuild(relocatedDir, homeDir)
         BuildResult relocatedResult = buildLocationMaybeExpectingWorkerExecutorDeprecation(relocatedDir, agpVersion)
 
         then:
@@ -69,6 +82,7 @@ class AndroidSantaTrackerCachingSmokeTest extends AbstractAndroidSantaTrackerSmo
 
         when: 'clean cached build, reusing configuration cache when enabled'
         cleanLocation(relocatedDir, agpVersion)
+        SantaTrackerConfigurationCacheWorkaround.beforeBuild(relocatedDir, homeDir)
         buildLocationMaybeExpectingWorkerExecutorDeprecation(relocatedDir, agpVersion)
 
         then:
