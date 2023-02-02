@@ -1667,6 +1667,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         return Optional.of(new DefaultLenientConfiguration.ArtifactResolveException(type, getIdentityPath().toString(), getDisplayName(), failures));
     }
 
+    @VisibleForTesting
     public void setWarnOnChangingUsage(boolean warnOnChangingUsage) {
         this.warnOnChangingUsage = warnOnChangingUsage;
     }
@@ -1720,6 +1721,11 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     @Override
     public void preventUsageMutation() {
         usageCanBeMutated = false;
+    }
+
+    @VisibleForTesting
+    public boolean isUsageMutable() {
+        return usageCanBeMutated;
     }
 
     @SuppressWarnings("deprecation")
