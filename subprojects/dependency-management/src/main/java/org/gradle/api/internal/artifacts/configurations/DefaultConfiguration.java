@@ -564,7 +564,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
     @Override
     protected void visitContents(FileCollectionStructureVisitor visitor) {
-        intrinsicFiles.visitContents(visitor);
+        intrinsicFiles.visitStructure(visitor);
     }
 
     @Override
