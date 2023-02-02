@@ -2437,6 +2437,11 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
     private class DefaultResolutionHost implements ResolutionHost {
         @Override
+        public String getDisplayName() {
+            return DefaultConfiguration.this.getDisplayName();
+        }
+
+        @Override
         public DisplayName displayName(String type) {
             return Describables.of(DefaultConfiguration.this, type);
         }
